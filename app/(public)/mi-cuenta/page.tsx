@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Notice, PageCard, Skeleton } from "@/components/ui";
 import { requireUser } from "@/lib/dal";
-import { signOut } from "../entrar/actions";
+import { signOut } from "@/lib/sign-out";
 
 export const metadata: Metadata = { title: "Mi cuenta" };
 

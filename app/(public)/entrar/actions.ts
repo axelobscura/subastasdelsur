@@ -31,8 +31,3 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
 
   redirect(safeNextPath(formData.get("next"), role === "admin" ? "/admin" : "/mi-cuenta"));
 }
-
-export async function signOut(): Promise<void> {
-  await auth.api.signOut({ headers: await headers() });
-  redirect("/");
-}

@@ -9,12 +9,12 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { like } from "drizzle-orm";
 import sharp from "sharp";
-import { adminPage, createDraft, deleteTrackedSessions, flowsEnabled, signOut, withDb } from "./helpers";
+import { adminPage, createDraft, deleteTrackedSessions, flowsEnabled, signOut, testRunId, withDb } from "./helpers";
 
 test.skip(!flowsEnabled || !process.env.UPLOAD_DIR, "opt-in: ALLOW_DB_TESTS=1, EMAIL_DRY_RUN_FILE and UPLOAD_DIR");
 test.describe.configure({ mode: "serial" });
 
-const titlePrefix = `[TEST] ${Date.now()}`;
+const titlePrefix = `[TEST] ${testRunId()}`;
 let fixtures: string;
 
 test.beforeAll(async () => {
@@ -32,10 +32,14 @@ test.afterAll(async () => {
   await rm(fixtures, { recursive: true, force: true });
 });
 
+/** Product folders this test created (other specs share UPLOAD_DIR while they run). */
+const ownProducts = new Set<string>();
+
+/** Photo files of this test's products. */
 async function storedFiles(): Promise<string[]> {
   const root = path.join(process.env.UPLOAD_DIR!, "products");
   const out: string[] = [];
-  for (const dir of await readdir(root).catch(() => [] as string[])) {
+  for (const dir of ownProducts) {
     for (const file of await readdir(path.join(root, dir)).catch(() => [] as string[])) out.push(`${dir}/${file}`);
   }
   return out;
@@ -67,6 +71,7 @@ test("an admin adds products with prices and photos, and the publish checks foll
   await admin.getByLabel("Precio de reserva (opcional)").fill("2,000");
   await admin.getByRole("button", { name: "Crear producto" }).click();
   await admin.waitForURL((url) => /\/productos\/[0-9a-f-]{36}$/.test(url.pathname) && url.searchParams.get("creado") === "1");
+  ownProducts.add(admin.url().match(/productos\/([0-9a-f-]{36})/)![1]);
   await expect(admin.getByText("Este producto todavía no tiene fotos.")).toBeVisible();
 
   // 3. Upload two photos and one fake: the fake is refused, the others are re-encoded to WebP
@@ -117,6 +122,7 @@ test("an admin adds products with prices and photos, and the publish checks foll
   await admin.getByLabel("Número de lote").fill("2");
   await admin.getByRole("button", { name: "Crear producto" }).click();
   await admin.waitForURL((url) => url.searchParams.get("creado") === "1");
+  ownProducts.add(admin.url().match(/productos\/([0-9a-f-]{36})/)![1]);
   await admin.goto(`/admin/subastas/${auctionId}`);
   await expect(admin.getByText("Un producto no tiene fotos.")).toBeVisible();
   await expect(admin.getByRole("button", { name: "Publicar subasta" })).toBeDisabled();

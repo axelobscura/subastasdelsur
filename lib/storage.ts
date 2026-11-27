@@ -24,7 +24,8 @@ export class UnsupportedImageError extends Error {
 }
 
 export function uploadRoot(): string {
-  return path.resolve(process.env.UPLOAD_DIR || "./.uploads");
+  // The ignore comment keeps Turbopack from tracing the whole project into the server bundle.
+  return path.resolve(/* turbopackIgnore: true */ process.env.UPLOAD_DIR || "./.uploads");
 }
 
 /** Absolute path for a key, or null if the key isn't one of ours (blocks path traversal). */

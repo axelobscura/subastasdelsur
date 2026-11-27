@@ -63,8 +63,13 @@ async function AuctionAdmin({
         <dd className="font-mono text-xs">
           {auction.startsAt.toISOString()} → {auction.endsAt.toISOString()}
         </dd>
-        <dt className="text-zinc-500">Dirección</dt>
-        <dd className="font-mono text-xs">/subastas/{auction.slug}</dd>
+        <dt className="text-zinc-500">Página pública</dt>
+        <dd>
+          <Link href={`/subastas/${auction.slug}`} className="font-mono text-xs underline">
+            /subastas/{auction.slug}
+          </Link>
+          {state === "draft" ? <span className="ml-2 text-xs text-zinc-500">(vista previa: solo tú la ves)</span> : null}
+        </dd>
         {auction.createdByName ? (
           <>
             <dt className="text-zinc-500">Creada por</dt>

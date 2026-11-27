@@ -16,14 +16,14 @@ Follow it, and keep its "Progress" checklist and "Open decisions" up to date as 
 
 ## Project state
 
-Phases 0–3 are done: foundations; auth, roles and admin approval of bidders; admin auctions with their time window; products and photos. See "Progress" in the plan. The public site (phase 4 onwards) isn't built yet, and the home page is still a heading.
+Phases 0–4 are done: foundations; auth, roles and admin approval of bidders; admin auctions with their time window; products and photos; the public catalog. See "Progress" in the plan. Bidding (phase 5) is next.
 
 **Pushing to `main` deploys to production** (https://subastasdelsur.io) within about a minute. See "Environments" in the plan. Only push builds that pass, and apply migrations first. The site is in Spanish (`lang="es"`).
 
 ## Commands
 
 ```bash
-npm run dev          # dev server on http://localhost:3000 (TZ=UTC; also re-writes the AGENTS.md block)
+npm run dev          # opens the DB tunnel if needed (scripts/ensure-tunnel.sh), then dev server on :3000 (TZ=UTC; also re-writes the AGENTS.md block)
 npm run build        # production build (TZ=UTC); also the main type/prerender check
 npm run start        # serve the production build (what pm2 runs on the VPS)
 npm run lint         # ESLint 9 flat config (next core-web-vitals + typescript)
@@ -34,7 +34,8 @@ npm run test:e2e     # Playwright (e2e/), in Mexico City and Tokyo browser timez
 npm run test:e2e:flow # opt-in: production build on :3100 + the e2e/flows/ specs on the real DB (tunnel up);
                       # emails are dry-run; [TEST] rows and test sessions are deleted in teardown
 
-npm run db:tunnel    # SSH tunnel to the VPS MariaDB (local 127.0.0.1:3307); keep open for any db:* / test:db
+npm run db:tunnel    # SSH tunnel to the VPS MariaDB (local 127.0.0.1:3307), foreground; needed for db:* / test:db / flows
+npm run db:tunnel:stop # close a background tunnel opened by npm run dev
 npm run db:check     # read-only: version, session timezone (must be +00:00), tables
 npm run db:generate  # drizzle-kit generate from lib/db/schema.ts into drizzle/; review the SQL
 npm run db:migrate   # backs up on the VPS (scripts/db-backup.sh), then drizzle-kit migrate
@@ -66,6 +67,13 @@ npx next typegen     # regenerate PageProps/LayoutProps route types after adding
   - Flow specs sign in with `adminPage()` from `e2e/flows/helpers.ts`, which records the session for teardown (`deleteTrackedSessions`).
 - Decisions about time (has it started? is the start in the future?) use `dbNow()` from `lib/db/time.ts`, never `new Date()`. Mutations lock the row with `.for("update")` inside a transaction.
 - Correlated subqueries: never write `${table.column}` for the *outer* row inside a `sql` subquery. In single-table selects Drizzle drops the table name, so the column binds to the inner table. Use the aliased fragments in `lib/db/aggregates.ts`, or qualify explicitly with `` `auction`.`id` ``.
+- Public pages are in `app/(public)/` (shared header); admin pages are in `app/admin/` (their own layout).
+  - Catalog reads (`lib/catalog.ts`) are `use cache` with tags `auctions` and `auction:<id>`. Every admin write must call `updateTag` for both.
+  - Anything that depends on the current time renders per request via `requestTime()` (`lib/request-time.ts`; the react-hooks purity lint forbids `Date.now()` in components).
+  - On the client, use `AuctionClock`/`useServerNow` (`components/clock.tsx`), which correct for the device clock.
+  - Drafts are visible only to the admin (`getVisibleAuction` in `lib/catalog-access.ts`).
+- Flow specs run in parallel against one DB and one UPLOAD_DIR. Name rows with `testRunId()` (not `Date.now()`), delete only your own rows and files, and seed drafts with `seedDraftAuction()`.
+- If `tsc`/`build` fails on `.next/dev/types/validator.ts` after moving routes, the running `next dev` has stale types: restart it, or move `.next/dev/types` aside.
 - Photos: `lib/storage.ts` (UPLOAD_DIR, sharp → WebP, `resolveKey` guards paths), served by `app/media/[...key]/route.ts`. Locally UPLOAD_DIR is `./.uploads`; the flow runner uses a temp dir. Since development uses the production DB, real photos are only uploaded on the live site.
 - Permissions per auction state come from `permissions()` in `lib/auctions/rules.ts`: `editWindow`, `editProducts` (lot/prices/add/remove), `editProductContent` (text/photos) and the status actions.
 - Don't put `key={updatedAt}` on a `useActionState` form that refreshes on success: it remounts and loses the success message.

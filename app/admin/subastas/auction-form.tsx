@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState, useSyncExternalStore } from "react";
+import { useActionState, useState } from "react";
+import { useBrowserTimeZone } from "@/components/clock";
 import { Field, FormMessage, type FormState, SubmitButton } from "@/components/form";
 import { formatAuctionTime, wallClockToInstant } from "@/lib/time";
 import { AUCTION_TIMEZONES } from "@/lib/timezones";
@@ -16,13 +17,6 @@ type Props = {
   canEditWindow?: boolean;
   canEditText?: boolean;
 };
-
-const noopSubscribe = () => () => {};
-
-/** The viewer's own timezone, only known in the browser (null while server-rendering). */
-function useBrowserTimeZone(): string | null {
-  return useSyncExternalStore(noopSubscribe, () => Intl.DateTimeFormat().resolvedOptions().timeZone, () => null);
-}
 
 function Preview({ label, value, timeZone }: { label: string; value: string; timeZone: string }) {
   const localZone = useBrowserTimeZone();

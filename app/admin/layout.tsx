@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui";
 import { requireAdmin } from "@/lib/dal";
-import { signOut } from "../entrar/actions";
+import { signOut } from "@/lib/sign-out";
 
 // The gate here is for UX only. Every admin page and action checks requireAdmin() itself,
 // because layouts don't re-render on client-side navigation.

@@ -10,6 +10,7 @@ import {
   auctionPhase,
   formatAuctionTime,
   formatAuctionTimeShort,
+  formatCountdown,
   instantToWallClock,
   isValidTimeZone,
   wallClockToInstant,
@@ -92,6 +93,15 @@ describe("formatAuctionTimeShort", () => {
     const text = formatAuctionTimeShort(new Date("2026-12-06T01:00:00.000Z"), MX);
     expect(text).toMatch(/5 dic 2026/);
     expect(text).toMatch(/19:00 GMT-6$/);
+  });
+});
+
+describe("formatCountdown", () => {
+  it("shows days only when there are any, and never goes negative", () => {
+    expect(formatCountdown(((3 * 24 + 4) * 3600 + 5 * 60 + 6) * 1000 + 999)).toBe("3 d 04:05:06");
+    expect(formatCountdown(59_000)).toBe("00:00:59");
+    expect(formatCountdown(1500 * 86_400_000)).toBe("1,500 d 00:00:00");
+    expect(formatCountdown(-5000)).toBe("00:00:00");
   });
 });
 

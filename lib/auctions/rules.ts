@@ -164,6 +164,16 @@ export function publishProblems(facts: PublishFacts, now: Date): string[] {
   return problems;
 }
 
+/** Published auctions split by phase for the public lists, each in the order visitors expect. */
+export function groupByPhase<T extends { startsAt: Date; endsAt: Date }>(auctions: T[], now: Date): { live: T[]; upcoming: T[]; ended: T[] } {
+  const groups = { live: [] as T[], upcoming: [] as T[], ended: [] as T[] };
+  for (const a of auctions) groups[auctionPhase(a.startsAt, a.endsAt, now)].push(a);
+  groups.live.sort((a, b) => a.endsAt.getTime() - b.endsAt.getTime()); // closing soonest first
+  groups.upcoming.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()); // starting soonest first
+  groups.ended.sort((a, b) => b.endsAt.getTime() - a.endsAt.getTime()); // most recent first
+  return groups;
+}
+
 // ---------------------------------------------------------------------------
 // Slugs
 // ---------------------------------------------------------------------------

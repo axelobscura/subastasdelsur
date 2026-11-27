@@ -36,7 +36,7 @@ Out of scope for v1: online payments, proxy/automatic bidding, multiple admins w
   - Runtime env is `/srv/nextjs/shared/.env.production`, symlinked into each release.
   - So: apply migrations **before** pushing code that needs them, and only push a build that passes.
 - **Production:** the Next.js app (`next build` + `next start`, kept alive by **pm2**) and MariaDB run on the same Hostinger VPS. The VPS runs **Node 22** (local dev has Node 24), so don't rely on anything newer than Node 22 and set `"engines": { "node": ">=22" }`. On the VPS the app connects to `127.0.0.1:3306`. The database port is **not** exposed to the internet. Secrets are set as environment variables on the VPS, never in the repo.
-- **Local development:** uses the same production database through an SSH tunnel, `ssh -N -L 3307:127.0.0.1:3306 -i <key> <user>@<vps-host>`. Local `DATABASE_URL` points at `127.0.0.1:3307`. The SSH host, user, key path and DB credentials are in `.env.local` (`SSH_*`, `DB_*`, `DATABASE_URL`). There's no separate dev database, by the owner's decision.
+- **Local development:** uses the same production database through an SSH tunnel, `ssh -N -L 3307:127.0.0.1:3306 -i <key> <user>@<vps-host>`. `npm run dev` opens it in the background if it isn't open (`scripts/ensure-tunnel.sh`), and `npm run db:tunnel:stop` closes it. Without it, public pages show the friendly error page (`app/(public)/error.tsx`). Local `DATABASE_URL` points at `127.0.0.1:3307`. The SSH host, user, key path and DB credentials are in `.env.local` (`SSH_*`, `DB_*`, `DATABASE_URL`). There's no separate dev database, by the owner's decision.
 - **Env files:** `.env*` is gitignored except `.env.example` (keys only). On the VPS, production needs: `DATABASE_URL` (port 3306), `BETTER_AUTH_URL` (the public `https://` URL), a production-only `BETTER_AUTH_SECRET`, `SMTP_*`, `EMAIL_FROM`, `ADMIN_NOTIFICATION_EMAIL` and `AUCTION_TIMEZONE`.
 
 ## Working against the production database
@@ -223,7 +223,13 @@ Confirm these with the owner before the phase that needs them:
   - The `/media` route, `media:backup` and `media:sweep`.
   - Fixed a phase 2 bug where correlated subqueries bound to the wrong row (now `lib/db/aggregates.ts`, with a DB regression test). Before the fix, product counts showed 0 and publishing was impossible.
   - Uploads go through `proxy.ts`, so `experimental.proxyClientMaxBodySize` and `serverActions.bodySizeLimit` are both 12 MB.
-- [ ] 4 Public catalog
+- [x] 4 Public catalog (2026-11-27):
+  - Pages: home (live and upcoming), `/subastas` (tabs en vivo / próximas / finalizadas), `/subastas/<slug>` and `/subastas/<slug>/<lote>`. They live in the `app/(public)` route group with the site header.
+  - Caching: catalog data uses `use cache` in `lib/catalog.ts` (tags `auctions` and `auction:<id>`, `cacheLife("hours")`). The live/upcoming split and the countdowns render per request through `requestTime()`.
+  - Times: shown in the auction's zone, labelled, plus the visitor's local time. The countdown is corrected to the server clock (tested with a device clock 3 days fast).
+  - Drafts: the admin sees them as a marked preview; everyone else gets a 404, and a draft's title never goes into page metadata.
+  - The bid area only shows the visitor's account status until phase 5.
+  - Building no longer needs the database.
 - [ ] 5 Bidding
 - [ ] 6 Closing and results
 - [ ] 7 Hardening

@@ -10,7 +10,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { eq } from "drizzle-orm";
-import { deleteTrackedSessions, trackSession } from "./helpers";
+import { deleteTrackedSessions, testRunId, trackSession } from "./helpers";
 
 const emailFile = process.env.EMAIL_DRY_RUN_FILE;
 test.skip(process.env.ALLOW_DB_TESTS !== "1" || !emailFile, "opt-in: ALLOW_DB_TESTS=1 and EMAIL_DRY_RUN_FILE");
@@ -38,7 +38,7 @@ async function waitForEmail(address: string, subject: RegExp): Promise<Sent> {
   return found!;
 }
 
-const bidderEmail = `test-${Date.now()}@example.com`;
+const bidderEmail = `test-${testRunId()}@example.com`;
 const bidderPassword = "clave-de-prueba-123";
 const adminEmail = process.env.ADMIN_EMAIL!;
 const adminNotify = process.env.ADMIN_NOTIFICATION_EMAIL!;

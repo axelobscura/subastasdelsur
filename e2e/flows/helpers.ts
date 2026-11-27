@@ -1,5 +1,13 @@
 import { expect, type Browser, type Page } from "@playwright/test";
 
+/**
+ * Unique id for one spec's [TEST] rows. Specs run in parallel and can start in the same
+ * millisecond, so a timestamp alone isn't enough (teardown deletes by this prefix).
+ */
+export function testRunId(): string {
+  return `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
 /** Opt-in guard for flows that write to the production database. */
 export const flowsEnabled = process.env.ALLOW_DB_TESTS === "1" && Boolean(process.env.EMAIL_DRY_RUN_FILE);
 
@@ -62,4 +70,47 @@ export async function createDraft(page: Page, title: string, startsAt: string, e
   await page.getByRole("button", { name: "Crear borrador" }).click();
   await expect(page).toHaveURL(/\/admin\/subastas\/[0-9a-f-]{36}\?creada=1$/);
   return page.url().match(/subastas\/([0-9a-f-]{36})/)![1];
+}
+
+export type SeedLot = { lot: number; title: string; startingPriceCents: number; minIncrementCents: number; photos: number };
+
+/**
+ * Insert a [TEST] draft auction with products and real photos straight into the DB and
+ * UPLOAD_DIR (faster than the admin UI, which has its own tests). Drafts are never public.
+ */
+export async function seedDraftAuction(opts: { title: string; slug: string; startsAt: Date; endsAt: Date; lots: SeedLot[] }): Promise<string> {
+  const sharp = (await import("sharp")).default;
+  const { saveProductImage } = await import("../../lib/storage");
+  const { auction, product, productImage } = await import("../../lib/db/schema");
+  const auctionId = crypto.randomUUID();
+  await withDb(async (db) => {
+    await db.insert(auction).values({
+      id: auctionId,
+      slug: opts.slug,
+      title: opts.title,
+      description: "Subasta de prueba automatizada.",
+      startsAt: opts.startsAt,
+      endsAt: opts.endsAt,
+      timezone: "America/Mexico_City",
+    });
+    for (const lot of opts.lots) {
+      const productId = crypto.randomUUID();
+      await db.insert(product).values({
+        id: productId,
+        auctionId,
+        lotNumber: lot.lot,
+        position: lot.lot,
+        title: lot.title,
+        description: `Descripción del lote ${lot.lot}.`,
+        startingPriceCents: lot.startingPriceCents,
+        minIncrementCents: lot.minIncrementCents,
+      });
+      for (let i = 0; i < lot.photos; i++) {
+        const jpeg = await sharp({ create: { width: 1200, height: 900, channels: 3, background: i % 2 ? "#445566" : "#aa7733" } }).jpeg().toBuffer();
+        const stored = await saveProductImage(productId, jpeg);
+        await db.insert(productImage).values({ productId, storageKey: stored.key, width: stored.width, height: stored.height, position: i });
+      }
+    }
+  });
+  return auctionId;
 }

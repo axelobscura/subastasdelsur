@@ -1,7 +1,7 @@
 // Runs under TZ=UTC, Asia/Tokyo and America/Los_Angeles (npm test). All expectations are
 // absolute instants, so passing everywhere shows the server's zone never leaks in.
 import { describe, expect, it } from "vitest";
-import { displayState, parseAuctionText, parseAuctionWindow, parseAuctionWindowForEdit, permissions, publishProblems, slugify, uniqueSlug } from "./rules";
+import { displayState, groupByPhase, parseAuctionText, parseAuctionWindow, parseAuctionWindowForEdit, permissions, publishProblems, slugify, uniqueSlug } from "./rules";
 
 const now = new Date("2026-12-01T18:00:00.000Z"); // 1 Dec 2026, 12:00 in Mexico City
 const form = { timezone: "America/Mexico_City", startsAt: "2026-12-05T19:00", endsAt: "2026-12-05T21:30" };
@@ -119,6 +119,24 @@ describe("publishProblems", () => {
     expect(publishProblems({ ...draft, productCount: 3, productsWithoutImages: 0 }, new Date("2026-12-06T01:00:00.000Z"))).toEqual([
       "La hora de inicio ya pasó. Cambia la fecha antes de publicar.",
     ]);
+  });
+});
+
+describe("groupByPhase", () => {
+  const at = (s: string, e: string, id: string) => ({ id, startsAt: new Date(s), endsAt: new Date(e) });
+  it("splits by phase and sorts each group", () => {
+    const list = [
+      at("2026-12-10T00:00Z", "2026-12-11T00:00Z", "later"),
+      at("2026-11-01T00:00Z", "2026-11-02T00:00Z", "old"),
+      at("2026-12-02T00:00Z", "2026-12-03T00:00Z", "soon"),
+      at("2026-11-30T00:00Z", "2026-12-05T00:00Z", "live-long"),
+      at("2026-11-30T00:00Z", "2026-12-01T20:00Z", "live-short"),
+      at("2026-11-20T00:00Z", "2026-11-25T00:00Z", "recent"),
+    ];
+    const g = groupByPhase(list, now);
+    expect(g.live.map((a) => a.id)).toEqual(["live-short", "live-long"]);
+    expect(g.upcoming.map((a) => a.id)).toEqual(["soon", "later"]);
+    expect(g.ended.map((a) => a.id)).toEqual(["recent", "old"]);
   });
 });
 

@@ -202,6 +202,14 @@ function zoneLabel(instant: Date, timeZone: string, locale: string): string {
   return part?.value ?? timeZone;
 }
 
+/** Remaining time for a countdown: "3 d 04:05:06", or "04:05:06" under a day. Never negative. */
+export function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(total / 86_400);
+  const hms = [Math.floor((total % 86_400) / 3600), Math.floor((total % 3600) / 60), total % 60].map((n) => String(n).padStart(2, "0")).join(":");
+  return days > 0 ? `${days.toLocaleString("es-MX")} d ${hms}` : hms;
+}
+
 export type AuctionPhase = "upcoming" | "live" | "ended";
 
 /**
