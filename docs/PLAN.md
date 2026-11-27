@@ -19,7 +19,8 @@ Out of scope for v1: online payments, proxy/automatic bidding, multiple admins w
 | Framework | Next.js 16.4 App Router, React 19, TS strict | Already set up. `cacheComponents` and `partialPrefetching` are on (see CLAUDE.md). |
 | Database | **MariaDB 11.8** on the Hostinger production VPS (database and user `subastasdelsur`; InnoDB, utf8mb4/`utf8mb4_unicode_ci`; server and system timezone UTC) | This is the **only** database. Development uses it too (see "Environments" and "Working against the production database"). Credentials live only in `.env.local` and the VPS environment. |
 | ORM / migrations | Drizzle ORM (`drizzle-orm/mysql2`, `mysqlTable`) + drizzle-kit (`dialect: 'mysql'`) with the `mysql2` driver | Schema in `lib/db/schema.ts`, migrations in `drizzle/`. Use a connection pool with `timezone: 'Z'` and run `SET time_zone = '+00:00'` on each new connection. |
-| Auth | Better Auth (email + password) with a `role` column (`admin` / `bidder`) | Use its Drizzle adapter. Create the admin with a seed script, never through public sign-up. |
+| Auth | Better Auth (email + password) with `role` (`admin` / `bidder`) and `approval_status` columns | Use its Drizzle adapter. Create the admin with a seed script, never through public sign-up. Bidders need the admin's approval (see "Bidder registration and approval"). |
+| Email | Transactional email through a provider wrapped in `lib/email/` (provider to be decided) | Used for registration and approval notices now, and outbid/winner notices in phase 6. Templates in Spanish, sent after the response with `after()`. |
 | Image storage | S3-compatible bucket (Cloudflare R2 or AWS S3) with presigned uploads | The browser uploads straight to the bucket, so the Server Action body limit doesn't apply. Wrapped in `lib/storage.ts` so the provider can be swapped. |
 | Dates/timezones | `lib/time.ts`, built only on `Intl.DateTimeFormat` (no date library) | Node 22/24 have no `Temporal`. Never use `new Date(string)` on wall-clock input. |
 | Validation | `zod` | Validate every Server Action input. |
@@ -56,9 +57,14 @@ Dev, migrations and any DB-touching tests all run against real data, so:
 
 ## Data model (Drizzle)
 
-Money is stored as integer cents (`*_cents`) in one currency (`CURRENCY` env), as `BIGINT`. All instants are UTC `DATETIME(3)`. Tables are InnoDB (needed for transactions and row locks) and utf8mb4. IDs are `CHAR(36)` UUIDs or `BIGINT AUTO_INCREMENT`; pick one in phase 0 and use it everywhere. Better Auth's tables use its own ID format. MariaDB 11.8 enforces `CHECK` constraints.
+Money is stored as integer cents (`*_cents`) in one currency (`CURRENCY` env), as `BIGINT`. All instants are UTC `DATETIME(3)`. Tables are InnoDB (needed for transactions and row locks) and utf8mb4. IDs are `varchar(36)` UUIDs everywhere (decided in phase 0), matching Better Auth's string IDs so FK types line up. MariaDB 11.8 enforces `CHECK` constraints.
 
-- **Better Auth tables** (`user`, `session`, `account`, `verification`), with `user.role` (`'admin' | 'bidder'`, default `'bidder'`).
+- **Better Auth tables** (`user`, `session`, `account`, `verification`), with extra `user` columns:
+  - `role`: `'admin' | 'bidder'`, default `'bidder'`.
+  - `approval_status`: `'pending' | 'approved' | 'rejected'`, default `'pending'`. The seeded admin is `'approved'`.
+  - `phone` and any other registration fields (see "Bidder registration and approval").
+  - `reviewed_at`, `reviewed_by` (FK to `user`), `review_note`: who approved or rejected, when, and why.
+  - The registration's Terms acceptance time (`terms_accepted_at`).
 - **`auction`**: `id`, `slug` (unique), `title`, `description`, `status` (`'draft' | 'published' | 'cancelled'`), `starts_at`, `ends_at`, `timezone`, `created_by`, `created_at`, `updated_at`. Check constraint: `ends_at > starts_at`.
   - The *phase* (upcoming / live / ended) is **derived** from `status` + times + now. It's never stored, so no cron job is needed to "open" or "close" an auction.
 - **`product`** (a lot): `id`, `auction_id` (FK, cascade), `lot_number`, `title`, `description`, `starting_price_cents`, `min_increment_cents`, `reserve_price_cents` (nullable), `current_price_cents` (nullable), `leading_bid_id` (nullable), `bid_count` (default 0), `position`, timestamps.
@@ -70,16 +76,35 @@ Money is stored as integer cents (`*_cents`) in one currency (`CURRENCY` env), a
 
 Bids go through Server Action `placeBid(productId, amountCents)` in `lib/bids.ts` (pure rule functions) and `app/…/actions.ts` (wiring):
 
-1. `requireUser()` from the DAL. The user must be a bidder, not an admin.
+1. `requireApprovedBidder()` from the DAL: signed in, `role = 'bidder'` and `approval_status = 'approved'`. Pending or rejected bidders get `'not_approved'`.
 2. In one transaction: `SELECT … FROM product JOIN auction … FOR UPDATE` (the product row is the lock).
 3. Reject the bid unless `auction.status = 'published'` and `starts_at <= UTC_TIMESTAMP(3) < ends_at`, using the DB's clock (the `FOR UPDATE` lock needs InnoDB).
 4. The minimum is `starting_price` for the first bid, then `current_price + min_increment`. Reject if `amount < minimum`. Also reject if the bidder already holds the leading bid.
 5. Insert the bid, then update `product.current_price_cents`, `leading_bid_id` and `bid_count`.
-6. Return the new state, or a typed error (`'not_live' | 'too_low' | 'already_leading' | 'unauthenticated'`) shown in Spanish.
+6. Return the new state, or a typed error (`'not_live' | 'too_low' | 'already_leading' | 'unauthenticated' | 'not_approved'`) shown in Spanish.
 
 At close, the winner is the leading bid, if it's at or above the reserve. Nothing needs to run at the exact moment of closing, because the phase is derived. A closing job (or a lazy check when the admin opens results) records outcomes and sends notifications.
 
 Later: soft close (anti-sniping, where a bid in the last N minutes pushes back that product's end) would add `product.ends_at` (nullable, falling back to the auction's) and change rule 3 to use the product's end.
+
+## Bidder registration and approval
+
+Bidders can't bid until the admin approves them.
+
+1. **Registration** (`/registro`): name, email, password, phone and acceptance of the terms. The exact field list is to be confirmed (see Open decisions). Validate it with zod. The account is created with `role = 'bidder'` and `approval_status = 'pending'`.
+2. **Two emails go out after the response is sent** (with `after()` from `next/server`, so a slow or failing email provider never breaks registration):
+   - **To the bidder:** "Recibimos tu registro". It confirms the account was created and that **access is being validated by the team**. They'll get another email once it's reviewed, and they can't bid until then.
+   - **To the admin** (`ADMIN_NOTIFICATION_EMAIL`): "Nuevo postor por aprobar", with the bidder's details (name, email, phone, any other registration fields, registration date and time in the auction timezone via `formatAuctionTime`) and a link to `/admin/postores/<id>`.
+3. **A pending bidder can sign in** and browse. `/mi-cuenta` and the bid form show "Tu cuenta está en revisión" instead of letting them bid. Rejected bidders see that the account wasn't approved, with a contact line.
+4. **The admin reviews** at `/admin/postores` (tabs: pendientes / aprobados / rechazados; the pending count shows in the dashboard nav). Opening a bidder shows all their data, with **Aprobar** and **Rechazar** (optional note). The Server Actions call `requireAdmin()`, set `approval_status`, `reviewed_at`, `reviewed_by` and `review_note`, and write to the audit log once it exists (phase 7).
+5. **Decision emails** to the bidder: "Tu cuenta fue aprobada" (with a link to the live and upcoming auctions) or "Tu cuenta no fue aprobada" (with the note, if any). These are proposed rather than requested; see Open decisions.
+6. **The admin can revoke** an approved bidder (set them back to `rejected`). Their existing bids stay. This is a phase 7 refinement.
+7. **Email failures are never lost work.** Pending bidders always appear in `/admin/postores` whether or not the admin email arrived. Failures are logged (`console.error` for pm2 logs) with the recipient and template, never the content.
+
+Email lives in `lib/email/`:
+- `send.ts`: the provider adapter, `sendEmail({ to, subject, html, text })`.
+- `templates.ts`: plain HTML and text templates in Spanish, with every user-supplied value escaped.
+- In development with `EMAIL_DRY_RUN=1`, emails are logged instead of sent.
 
 ## Admin rules
 
@@ -97,18 +122,21 @@ app/
   subastas/page.tsx                         # all auctions (tabs: en vivo / próximas / finalizadas)
   subastas/[slug]/page.tsx                  # auction: times, countdown, product grid
   subastas/[slug]/[lote]/page.tsx           # product: gallery, live price, bid form, bid history
-  entrar/ registro/ mi-cuenta/              # auth + "mis pujas"
+  entrar/ registro/ mi-cuenta/              # auth, account status ("en revisión") and "mis pujas"
   admin/layout.tsx                          # requireAdmin(); dashboard shell
   admin/page.tsx                            # auctions table + status
   admin/subastas/nueva/page.tsx             # create auction (title, description, window, timezone)
   admin/subastas/[id]/page.tsx              # edit auction, manage products, publish/cancel
   admin/subastas/[id]/productos/[pid]/page.tsx  # product form + image manager
   admin/subastas/[id]/resultados/page.tsx   # winners per product (after close)
+  admin/postores/page.tsx                   # bidders by status (pendientes / aprobados / rechazados)
+  admin/postores/[id]/page.tsx              # bidder details, approve / reject
   api/auth/[...all]/route.ts                # Better Auth handler
   api/productos/[id]/estado/route.ts        # no-store live state for polling
 lib/
   db/schema.ts, db/index.ts                 # Drizzle
-  auth.ts, dal.ts                           # Better Auth config; server-only session/role checks
+  auth.ts, dal.ts                           # Better Auth config; server-only session, role and approval checks
+  email/send.ts, email/templates.ts         # provider adapter, Spanish templates
   time.ts                                   # the timezone rules above (unit-tested)
   bids.ts                                   # bid rules (unit-tested)
   storage.ts                                # presign / delete
@@ -128,7 +156,14 @@ scripts/seed-admin.ts                       # create the admin user
 Each phase ends with `npm run lint`, `npx tsc --noEmit`, the tests and a manual check in `npm run dev`.
 
 0. **Foundations.** Add dependencies, set up Drizzle with a MariaDB connection (`mysql2` pool, UTC-pinned, `DATABASE_URL`) and the first migration (backup first), `.env.example`, `lib/time.ts` and its multi-timezone Vitest suite, Playwright set up with one smoke test, and `TZ=UTC` in the scripts.
-1. **Auth and roles.** Better Auth, the role column, `lib/dal.ts` (`getSession`, `requireUser`, `requireAdmin`), `proxy.ts`, `/entrar` and `/registro`, and `scripts/seed-admin.ts`.
+1. **Auth, roles and bidder approval.**
+   - Better Auth with the `role` and `approval_status` columns, plus a migration.
+   - `lib/dal.ts`: `getSession`, `requireUser`, `requireApprovedBidder` and `requireAdmin`.
+   - `proxy.ts`, `/entrar`, `/registro` and `/mi-cuenta` (account status).
+   - `scripts/seed-admin.ts`.
+   - `lib/email/` with the registration emails to the bidder and the admin.
+   - `/admin/postores` approve and reject, with the decision emails.
+   - The `auction.created_by` column.
 2. **Admin: auctions.** Create, edit and list auctions. A window form with `datetime-local` and a timezone select, converted on the server per the timezone rules. Draft, publish and cancel with the publish checks. Times locked once live.
 3. **Admin: products and images.** Product CRUD inside an auction (lot number, prices, increment, reserve), presigned image uploads, reorder and cover image, `remotePatterns`.
 4. **Public catalog.** Home, the auctions list with tabs, and the auction and product pages with the cached catalog data, labelled times plus local time, and a countdown with skew correction.
@@ -146,7 +181,12 @@ Confirm these with the owner before the phase that needs them:
 - ~~Dev database~~: decided. None; development uses the production database (safety rules in "Working against the production database").
 - **Image storage** (phase 3): R2 or S3 bucket, or the VPS disk (for example `/var/www/subastasdelsur-uploads` served by the web server, with the same `lib/storage.ts` interface). The disk is simpler but needs its own backups and counts against the VPS's space.
 - **Currency** (phase 3): MXN, ARS, CLP, USD…
-- **Bidder sign-up** (phase 1): open sign-up with email verification, or admin-approved bidders? Is a phone number or ID required?
+- ~~Bidder sign-up~~: decided. The admin approves every bidder. On registration the bidder gets an email saying their access is being validated, and the admin gets an email with the bidder's details.
+- **Email provider** (phase 1): an SMTP mailbox on the domain (for example a Hostinger mailbox, via `nodemailer`), or an email API such as Resend or Amazon SES. Needs the sending address (e.g. `no-reply@<domain>`), with SPF/DKIM set up on the domain so emails don't land in spam.
+- **Admin notification address** (phase 1): which inbox receives "Nuevo postor por aprobar" (`ADMIN_NOTIFICATION_EMAIL`)?
+- **Registration fields** (phase 1): name, email, phone and password, plus anything else the admin needs in order to validate someone (city/state, ID number, RFC, address…)?
+- **Decision emails** (phase 1): should bidders also be emailed when they're approved or rejected? Proposed: yes.
+- **Email verification** (phase 1): should bidders also confirm their email address with a link before the admin reviews them? Proposed: yes, because it stops fake addresses reaching the approval queue.
 - **Bid rules** (phase 5): can someone bid if they're already leading? Fixed increment per product or price-tiered increments? Is the reserve shown publicly?
 - **Soft close** (phase 7): wanted, and for how many minutes?
 
