@@ -24,6 +24,9 @@
 # production
 /build
 
+# local photo uploads (UPLOAD_DIR)
+/.uploads/
+
 # misc
 .DS_Store
 *.pem

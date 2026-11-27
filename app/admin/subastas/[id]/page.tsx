@@ -10,6 +10,7 @@ import { timeZoneLabel } from "@/lib/timezones";
 import { updateAuction } from "../actions";
 import { AuctionForm } from "../auction-form";
 import { StateBadge } from "../state-badge";
+import { ProductsSection } from "./products-section";
 import { StatusActions } from "./status-actions";
 
 export const metadata: Metadata = { title: "Editar subasta" };
@@ -34,7 +35,7 @@ async function AuctionAdmin({
   params: PageProps<"/admin/subastas/[id]">["params"];
   searchParams: PageProps<"/admin/subastas/[id]">["searchParams"];
 }) {
-  const [{ id }, { creada }] = await Promise.all([params, searchParams]);
+  const [{ id }, query] = await Promise.all([params, searchParams]);
   const result = await getAuctionForAdmin(id);
   if (!result) notFound();
   const { auction, now } = result;
@@ -48,7 +49,8 @@ async function AuctionAdmin({
         <h1 className="text-2xl font-semibold tracking-tight">{auction.title}</h1>
         <StateBadge state={state} label={DISPLAY_STATE_LABELS[state]} />
       </div>
-      {creada ? <Notice tone="success">Borrador creado. Ahora agrega los productos y publícala cuando esté lista.</Notice> : null}
+      {query.creada ? <Notice tone="success">Borrador creado. Ahora agrega los productos y publícala cuando esté lista.</Notice> : null}
+      {query["producto-eliminado"] ? <Notice tone="success">Producto eliminado.</Notice> : null}
 
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800" data-testid="auction-summary">
         <dt className="text-zinc-500">Inicio</dt>
@@ -83,12 +85,9 @@ async function AuctionAdmin({
         <StatusActions id={auction.id} can={can} publishProblems={problems} />
       </section>
 
-      <section aria-labelledby="productos" className="flex flex-col gap-2">
-        <h2 id="productos" className="text-lg font-medium">
-          Productos ({auction.productCount})
-        </h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">La gestión de productos y fotos llega en la siguiente fase.</p>
-      </section>
+      <Suspense fallback={<Skeleton className="h-32" />}>
+        <ProductsSection auctionId={auction.id} canEditProducts={can.editProducts} />
+      </Suspense>
 
       <section aria-labelledby="datos" className="flex flex-col gap-3">
         <h2 id="datos" className="text-lg font-medium">

@@ -5,19 +5,19 @@
 import "server-only";
 import { desc, eq, sql } from "drizzle-orm";
 import { requireAdmin } from "../dal";
-import { type Auction, auction, getDb, product, productImage } from "../db";
+import { type Auction, auction, getDb } from "../db";
+import { auctionProductCount, auctionProductsWithoutImages } from "../db/aggregates";
 import { dbNow } from "../db/time";
 
 export type AdminAuctionRow = Auction & { productCount: number };
 
-const productCount = sql<number>`(SELECT COUNT(*) FROM ${product} WHERE ${product.auctionId} = ${auction.id})`.mapWith(Number);
 
 export async function listAuctions(): Promise<{ auctions: AdminAuctionRow[]; now: Date }> {
   await requireAdmin("/admin/subastas");
   const db = getDb();
   const [rows, now] = await Promise.all([
     db
-      .select({ auction, productCount })
+      .select({ auction, productCount: auctionProductCount })
       .from(auction)
       .orderBy(desc(auction.startsAt))
       .limit(500),
@@ -35,13 +35,9 @@ export async function getAuctionForAdmin(id: string): Promise<{ auction: AdminAu
     db
       .select({
         auction,
-        productCount,
-        productsWithoutImages: sql<number>`(
-          SELECT COUNT(*) FROM ${product}
-          WHERE ${product.auctionId} = ${auction.id}
-            AND NOT EXISTS (SELECT 1 FROM ${productImage} WHERE ${productImage.productId} = ${product.id})
-        )`.mapWith(Number),
-        createdByName: sql<string | null>`(SELECT name FROM \`user\` WHERE id = ${auction.createdBy})`,
+        productCount: auctionProductCount,
+        productsWithoutImages: auctionProductsWithoutImages,
+        createdByName: sql<string | null>`(SELECT u.name FROM \`user\` u WHERE u.id = \`auction\`.\`created_by\`)`,
       })
       .from(auction)
       .where(eq(auction.id, id)),

@@ -16,7 +16,9 @@ Follow it, and keep its "Progress" checklist and "Open decisions" up to date as 
 
 ## Project state
 
-Phases 0–2 are done: foundations; auth, roles and admin approval of bidders; admin auctions with their time window. See "Progress" in the plan. Products and photos (phase 3) and the public site (phase 4 onwards) aren't built yet, and the home page is still a heading. The site is in Spanish (`lang="es"`).
+Phases 0–3 are done: foundations; auth, roles and admin approval of bidders; admin auctions with their time window; products and photos. See "Progress" in the plan. The public site (phase 4 onwards) isn't built yet, and the home page is still a heading.
+
+**Pushing to `main` deploys to production** (https://subastasdelsur.io) within about a minute. See "Environments" in the plan. Only push builds that pass, and apply migrations first. The site is in Spanish (`lang="es"`).
 
 ## Commands
 
@@ -37,6 +39,8 @@ npm run db:check     # read-only: version, session timezone (must be +00:00), ta
 npm run db:generate  # drizzle-kit generate from lib/db/schema.ts into drizzle/; review the SQL
 npm run db:migrate   # backs up on the VPS (scripts/db-backup.sh), then drizzle-kit migrate
 npm run db:backup    # backup only: /root/backups/subastasdelsur/*.sql.gz, newest 20 kept
+npm run media:backup # tar of the VPS photos (/srv/nextjs/shared/uploads) next to the DB dumps
+npm run media:sweep  # list photo files with no DB row (older than 1h); --delete removes them
 npm run test:db      # opt-in DB tests (ALLOW_DB_TESTS=1); writes only inside rolled-back transactions
 npm run db:seed-admin # create/update the admin from ADMIN_EMAIL/ADMIN_PASSWORD (idempotent; --reset-password)
 npx next typegen     # regenerate PageProps/LayoutProps route types after adding routes (else tsc errors)
@@ -61,6 +65,9 @@ npx next typegen     # regenerate PageProps/LayoutProps route types after adding
   - Wait for a URL by pathname (`waitForURL(url => url.pathname === …)`), because `/entrar?next=/admin` also "ends in /admin".
   - Flow specs sign in with `adminPage()` from `e2e/flows/helpers.ts`, which records the session for teardown (`deleteTrackedSessions`).
 - Decisions about time (has it started? is the start in the future?) use `dbNow()` from `lib/db/time.ts`, never `new Date()`. Mutations lock the row with `.for("update")` inside a transaction.
+- Correlated subqueries: never write `${table.column}` for the *outer* row inside a `sql` subquery. In single-table selects Drizzle drops the table name, so the column binds to the inner table. Use the aliased fragments in `lib/db/aggregates.ts`, or qualify explicitly with `` `auction`.`id` ``.
+- Photos: `lib/storage.ts` (UPLOAD_DIR, sharp → WebP, `resolveKey` guards paths), served by `app/media/[...key]/route.ts`. Locally UPLOAD_DIR is `./.uploads`; the flow runner uses a temp dir. Since development uses the production DB, real photos are only uploaded on the live site.
+- Permissions per auction state come from `permissions()` in `lib/auctions/rules.ts`: `editWindow`, `editProducts` (lot/prices/add/remove), `editProductContent` (text/photos) and the status actions.
 - Don't put `key={updatedAt}` on a `useActionState` form that refreshes on success: it remounts and loses the success message.
 - Email: `lib/email/send.ts` (`queueEmail` sends after the response). Set `EMAIL_DRY_RUN=1` to log instead of sending. Never send real emails from tests.
 - npm blocks dependency install scripts (esbuild, fsevents) until they're approved. Everything works without them, so don't approve them unasked.

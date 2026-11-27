@@ -64,6 +64,46 @@ describe.runIf(process.env.ALLOW_DB_TESTS === "1")("database round trip (rolled 
     expect(Number((left as { n: number }[])[0].n)).toBe(0);
   });
 
+  it("counts products, photos and covers per row (correlated subqueries bind to the outer row)", async () => {
+    const { auctionProductCount, auctionProductsWithoutImages, productCover, productImageCount } = await import("./aggregates");
+    const { product, productImage } = await import("./schema");
+    await expect(
+      db.transaction(async (tx) => {
+        const auctionId = crypto.randomUUID();
+        const [a, b] = [crypto.randomUUID(), crypto.randomUUID()];
+        const window = { startsAt: new Date("2030-01-01T18:00:00Z"), endsAt: new Date("2030-01-01T20:00:00Z") };
+        await tx.insert(auction).values({ id: auctionId, slug: `test-${auctionId}`, title: "[TEST] counts", description: "", timezone: "America/Mexico_City", ...window });
+        const lot = { auctionId, description: "", startingPriceCents: 1000, minIncrementCents: 100 };
+        await tx.insert(product).values([
+          { id: a, lotNumber: 1, title: "[TEST] A", ...lot },
+          { id: b, lotNumber: 2, title: "[TEST] B", ...lot },
+        ]);
+        const key = (n: number) => `products/${a}/${"0".repeat(8)}-0000-4000-8000-00000000000${n}.webp`;
+        await tx.insert(productImage).values([
+          { productId: a, storageKey: key(2), width: 10, height: 10, position: 1 },
+          { productId: a, storageKey: key(1), width: 10, height: 10, position: 0 },
+        ]);
+
+        const [counts] = await tx
+          .select({ products: auctionProductCount, withoutImages: auctionProductsWithoutImages })
+          .from(auction)
+          .where(eq(auction.id, auctionId));
+        expect(counts).toEqual({ products: 2, withoutImages: 1 });
+
+        const rows = await tx
+          .select({ id: product.id, images: productImageCount, cover: sql<string | null>`${productCover("storage_key")}` })
+          .from(product)
+          .where(eq(product.auctionId, auctionId))
+          .orderBy(product.lotNumber);
+        expect(rows).toEqual([
+          { id: a, images: 2, cover: key(1) },
+          { id: b, images: 0, cover: null },
+        ]);
+        throw new Rollback();
+      }),
+    ).rejects.toBeInstanceOf(Rollback);
+  });
+
   it("enforces the window check (ends_at > starts_at)", async () => {
     const at = new Date("2026-12-06T01:00:00.000Z");
     const error = await db

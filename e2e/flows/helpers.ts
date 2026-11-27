@@ -1,4 +1,4 @@
-import type { Browser, Page } from "@playwright/test";
+import { expect, type Browser, type Page } from "@playwright/test";
 
 /** Opt-in guard for flows that write to the production database. */
 export const flowsEnabled = process.env.ALLOW_DB_TESTS === "1" && Boolean(process.env.EMAIL_DRY_RUN_FILE);
@@ -49,4 +49,17 @@ export async function withDb<T>(fn: (db: import("../../lib/db/client").Db) => Pr
   } finally {
     await pool.end();
   }
+}
+
+/** Create a draft auction through the admin form; returns its id. */
+export async function createDraft(page: Page, title: string, startsAt: string, endsAt: string): Promise<string> {
+  await page.goto("/admin/subastas/nueva");
+  await page.getByLabel("Título").fill(title);
+  await page.getByLabel("Descripción").fill("Subasta de prueba automatizada.");
+  await expect(page.getByLabel("Zona horaria de la subasta")).toHaveValue("America/Mexico_City");
+  await page.getByLabel("Inicio", { exact: true }).fill(startsAt);
+  await page.getByLabel("Cierre", { exact: true }).fill(endsAt);
+  await page.getByRole("button", { name: "Crear borrador" }).click();
+  await expect(page).toHaveURL(/\/admin\/subastas\/[0-9a-f-]{36}\?creada=1$/);
+  return page.url().match(/subastas\/([0-9a-f-]{36})/)![1];
 }

@@ -3,9 +3,9 @@
  * The core requirement: the start is the same instant wherever the admin works from.
  * Creates "[TEST]" draft auctions (never published, so never public) and deletes them afterwards.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { eq, like, sql } from "drizzle-orm";
-import { adminPage, deleteTrackedSessions, flowsEnabled, signOut, withDb } from "./helpers";
+import { adminPage, createDraft, deleteTrackedSessions, flowsEnabled, signOut, withDb } from "./helpers";
 
 test.skip(!flowsEnabled, "opt-in: ALLOW_DB_TESTS=1 and EMAIL_DRY_RUN_FILE");
 test.describe.configure({ mode: "serial" });
@@ -34,17 +34,6 @@ async function storedWindow(id: string) {
   });
 }
 
-async function createDraft(page: Page, title: string, startsAt: string, endsAt: string): Promise<string> {
-  await page.goto("/admin/subastas/nueva");
-  await page.getByLabel("Título").fill(title);
-  await page.getByLabel("Descripción").fill("Subasta de prueba automatizada.");
-  await expect(page.getByLabel("Zona horaria de la subasta")).toHaveValue("America/Mexico_City");
-  await page.getByLabel("Inicio", { exact: true }).fill(startsAt);
-  await page.getByLabel("Cierre", { exact: true }).fill(endsAt);
-  await page.getByRole("button", { name: "Crear borrador" }).click();
-  await expect(page).toHaveURL(/\/admin\/subastas\/[0-9a-f-]{36}\?creada=1$/);
-  return page.url().match(/subastas\/([0-9a-f-]{36})/)![1];
-}
 
 test("an admin in Tokyo and an admin in Los Angeles set the same Mexico City start time", async ({ browser }) => {
   // 1. An admin whose computer is in Tokyo creates an auction for 20 Dec 2030, 19:00 Mexico City time

@@ -7,12 +7,13 @@ cd "$(dirname "$0")/.."
 
 PORT="${E2E_PORT:-3100}"
 EMAIL_FILE="$(mktemp -t subastas-emails)"
-export TZ=UTC EMAIL_DRY_RUN=1 EMAIL_DRY_RUN_FILE="$EMAIL_FILE" BETTER_AUTH_URL="http://localhost:${PORT}"
+UPLOAD_DIR="$(mktemp -d -t subastas-uploads)" # photos from tests never mix with real ones
+export TZ=UTC EMAIL_DRY_RUN=1 EMAIL_DRY_RUN_FILE="$EMAIL_FILE" BETTER_AUTH_URL="http://localhost:${PORT}" UPLOAD_DIR
 
 npx next build
 npx next start -p "$PORT" > "${EMAIL_FILE}.server.log" 2>&1 &
 server_pid=$!
-trap 'kill "$server_pid" 2>/dev/null || true; rm -f "$EMAIL_FILE"' EXIT
+trap 'kill "$server_pid" 2>/dev/null || true; rm -f "$EMAIL_FILE"; rm -rf "$UPLOAD_DIR"' EXIT
 
 for _ in $(seq 1 60); do
   curl -fs -o /dev/null "http://localhost:${PORT}/" && break

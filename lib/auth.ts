@@ -32,6 +32,12 @@ export const auth = betterAuth({
   appName: "Subastas del sur",
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
+  // Extra origins besides BETTER_AUTH_URL, comma-separated (production: the www host, which
+  // nginx also serves).
+  trustedOrigins: (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   database: drizzleAdapter(db, {
     provider: "mysql",
     schema: { user: schema.user, session: schema.session, account: schema.account, verification: schema.verification },

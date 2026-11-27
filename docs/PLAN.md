@@ -21,7 +21,7 @@ Out of scope for v1: online payments, proxy/automatic bidding, multiple admins w
 | ORM / migrations | Drizzle ORM (`drizzle-orm/mysql2`, `mysqlTable`) + drizzle-kit (`dialect: 'mysql'`) with the `mysql2` driver | Schema in `lib/db/schema.ts`, migrations in `drizzle/`. Use a connection pool with `timezone: 'Z'` and run `SET time_zone = '+00:00'` on each new connection. |
 | Auth | Better Auth (email + password) with `role` (`admin` / `bidder`) and `approval_status` columns | Use its Drizzle adapter. Create the admin with a seed script, never through public sign-up. Bidders need the admin's approval (see "Bidder registration and approval"). |
 | Email | Hostinger mailbox `admin@subastasdelsur.io` over SMTP (nodemailer), wrapped in `lib/email/` | Used for registration and approval notices now, and outbid/winner notices in phase 6. Templates in Spanish, sent after the response with `after()`. |
-| Image storage | S3-compatible bucket (Cloudflare R2 or AWS S3) with presigned uploads | The browser uploads straight to the bucket, so the Server Action body limit doesn't apply. Wrapped in `lib/storage.ts` so the provider can be swapped. |
+| Image storage | **The VPS disk**: `UPLOAD_DIR` (production: `/srv/nextjs/shared/uploads`, outside the release folders so files survive deploys) | Uploads go through an admin Server Action. sharp re-encodes each one to WebP (max 2400 px, EXIF/GPS stripped) and gives its size. Files are served at `/media/<key>`. Wrapped in `lib/storage.ts` so a bucket can replace it later. |
 | Dates/timezones | `lib/time.ts`, built only on `Intl.DateTimeFormat` (no date library) | Node 22/24 have no `Temporal`. Never use `new Date(string)` on wall-clock input. |
 | Validation | `zod` | Validate every Server Action input. |
 | Live updates | Client polling of a no-store Route Handler (every 3–5 s while live) | Simple and works on any host. The app runs as a long-lived Node process on the VPS, so moving to SSE later is possible and only touches the hook. |
@@ -29,7 +29,13 @@ Out of scope for v1: online payments, proxy/automatic bidding, multiple admins w
 
 ## Environments
 
-- **Production:** the Next.js app (`next build` + `next start`, kept alive by **pm2**, which is already installed) and MariaDB run on the same Hostinger VPS. The VPS runs **Node 22** (local dev has Node 24), so don't rely on anything newer than Node 22 and set `"engines": { "node": ">=22" }`. On the VPS the app connects to `127.0.0.1:3306`. The database port is **not** exposed to the internet. Secrets are set as environment variables on the VPS, never in the repo.
+- **Deploys are automatic: every push to `main` goes live** at https://subastasdelsur.io within about a minute.
+  - The timer `subastasdelsur-autodeploy.timer` runs `/srv/nextjs/autodeploy.sh` every minute, which runs `deploy.sh`.
+  - `deploy.sh` builds the commit into `/srv/nextjs/releases/<stamp>-<sha>` and switches `/srv/nextjs/current` only if `npm ci` and the build succeed. It then runs `pm2 reload` and keeps the 3 newest releases.
+  - The app runs as the `nextjs` user under that user's own pm2 (`pm2-nextjs.service`), behind nginx (`/etc/nginx/sites-enabled/subastasdelsur.io`, TLS by Certbot, `client_max_body_size 20m`).
+  - Runtime env is `/srv/nextjs/shared/.env.production`, symlinked into each release.
+  - So: apply migrations **before** pushing code that needs them, and only push a build that passes.
+- **Production:** the Next.js app (`next build` + `next start`, kept alive by **pm2**) and MariaDB run on the same Hostinger VPS. The VPS runs **Node 22** (local dev has Node 24), so don't rely on anything newer than Node 22 and set `"engines": { "node": ">=22" }`. On the VPS the app connects to `127.0.0.1:3306`. The database port is **not** exposed to the internet. Secrets are set as environment variables on the VPS, never in the repo.
 - **Local development:** uses the same production database through an SSH tunnel, `ssh -N -L 3307:127.0.0.1:3306 -i <key> <user>@<vps-host>`. Local `DATABASE_URL` points at `127.0.0.1:3307`. The SSH host, user, key path and DB credentials are in `.env.local` (`SSH_*`, `DB_*`, `DATABASE_URL`). There's no separate dev database, by the owner's decision.
 - **Env files:** `.env*` is gitignored except `.env.example` (keys only). On the VPS, production needs: `DATABASE_URL` (port 3306), `BETTER_AUTH_URL` (the public `https://` URL), a production-only `BETTER_AUTH_SECRET`, `SMTP_*`, `EMAIL_FROM`, `ADMIN_NOTIFICATION_EMAIL` and `AUCTION_TIMEZONE`.
 
@@ -120,8 +126,12 @@ Email lives in `lib/email/`:
   - **Eliminar borrador:** drafts only, with a confirmation checkbox. Products and images cascade; deleting the image files from storage comes in phase 3.
 - A draft's slug follows its title. Once published, the slug (the public URL) never changes.
 - Once an auction is **live or ended**, its times, prices and product list are locked. Only text, images and cancelling stay editable. Cancelling a live auction needs confirmation and notifies bidders (phase 6).
-- Image upload: the client asks `createUploadUrl(productId, contentType, size)` (an admin Server Action) for a presigned PUT, uploads directly, then calls `attachImage(productId, key, width, height)`. Allow `image/jpeg|png|webp|avif` only, max ~10 MB, up to ~12 images per product. Reorder and delete in the UI. Delete the object from the bucket when its row is deleted.
-- Add the bucket's public host to `images.remotePatterns` in `next.config.ts`, then render with `next/image`.
+- Image upload works on the VPS disk:
+  - **Upload:** an admin Server Action receives the files. It checks the real type from the file's first bytes (JPEG, PNG, WebP, AVIF, HEIC), allows at most 10 MB each and 12 per product, re-encodes to WebP with sharp, and writes to `UPLOAD_DIR/products/<productId>/<uuid>.webp`. It writes to a temp file first, then renames, so a half-written file is never visible.
+  - **Database:** the `product_image` row stores the key and the size. Deleting the row, the product or the auction also deletes the files. Orphan files left by a crash get cleaned up by a small sweep script.
+  - **Serving:** a Route Handler serves `/media/<key>` from `UPLOAD_DIR`, rejecting path traversal and sending `Cache-Control: immutable`, since keys are never reused. `next/image` uses it via `images.localPatterns`. nginx can serve `/media/` directly later if traffic needs it.
+  - **Backups:** `npm run media:backup` saves a tar of `UPLOAD_DIR` next to the DB dumps on the VPS.
+  - **Local development:** because development uses the production database, photos uploaded from a laptop would only exist on that laptop. So locally only `[TEST]` drafts get photos, and the real catalog is managed on the live site.
 
 ## Routes (Spanish URLs)
 
@@ -148,7 +158,8 @@ lib/
   email/send.ts, email/templates.ts         # provider adapter, Spanish templates
   time.ts                                   # the timezone rules above (unit-tested)
   bids.ts                                   # bid rules (unit-tested)
-  storage.ts                                # presign / delete
+  storage.ts                                # VPS-disk storage: save (sharp → WebP), delete, path safety
+  app/media/[...key]/route.ts               # serves uploaded photos
 proxy.ts                                    # optimistic auth redirects for /admin and /mi-cuenta
 scripts/seed-admin.ts                       # create the admin user
 ```
@@ -174,7 +185,7 @@ Each phase ends with `npm run lint`, `npx tsc --noEmit`, the tests and a manual 
    - `/admin/postores` approve and reject, with the decision emails.
    - The `auction.created_by` column.
 2. **Admin: auctions.** Create, edit and list auctions. A window form with `datetime-local` and a timezone select, converted on the server per the timezone rules. Draft, publish and cancel with the publish checks. Times locked once live.
-3. **Admin: products and images.** Product CRUD inside an auction (lot number, prices, increment, reserve), presigned image uploads, reorder and cover image, `remotePatterns`.
+3. **Admin: products and images.** Product create/edit/delete inside an auction (lot number, prices, increment, reserve), photo uploads to the VPS disk, reorder and cover image, `/media` route, media backup.
 4. **Public catalog.** Home, the auctions list with tabs, and the auction and product pages with the cached catalog data, labelled times plus local time, and a countdown with skew correction.
 5. **Bidding.** `lib/bids.ts` rules plus Vitest tests, the `placeBid` transaction, the state route, a polling hook (fast while live, stopped once ended), the bid form with useful errors, the bid history, and "mis pujas" in `/mi-cuenta`.
 6. **Closing and results.** Admin results page (winner, reserve met or not), a closing job or lazy settlement, email notifications to winners and outbid bidders (provider to be chosen), and auctions marked finalizada.
@@ -188,8 +199,9 @@ Confirm these with the owner before the phase that needs them:
 - ~~Hosting~~: decided. App and database on the Hostinger production VPS.
 - ~~Database engine~~: decided. MariaDB 11.8 on the VPS.
 - ~~Dev database~~: decided. None; development uses the production database (safety rules in "Working against the production database").
-- **Image storage** (phase 3): R2 or S3 bucket, or the VPS disk (for example `/var/www/subastasdelsur-uploads` served by the web server, with the same `lib/storage.ts` interface). The disk is simpler but needs its own backups and counts against the VPS's space.
-- **Currency** (phase 3): MXN, ARS, CLP, USD…
+- ~~Image storage~~: decided. The VPS disk, at `/srv/nextjs/shared/uploads` (96 GB disk, 90 GB free on 2026-11-27).
+- ~~Production env~~: fixed on 2026-11-27. Added `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS` (www), a production-only `BETTER_AUTH_SECRET`, `SMTP_*`, `EMAIL_FROM`, `ADMIN_NOTIFICATION_EMAIL`, `EMAIL_DRY_RUN=0` and `UPLOAD_DIR`. The previous file is kept as `.env.production.bak-20261127T170830Z`. The www trusted-origin code takes effect once it's pushed (deployed).
+- **Currency** (to confirm): built with `CURRENCY=MXN` (pesos, entered as `1,500.50`, shown as `$1,500.00`). Changing it is one env var, but must happen before real auctions exist.
 - ~~Bidder sign-up~~: decided. The admin approves every bidder. On registration the bidder gets an email saying their access is being validated, and the admin gets an email with the bidder's details.
 - ~~Email provider~~: decided. The Hostinger mailbox `admin@subastasdelsur.io` over SMTP. To check: SPF/DKIM/DMARC for subastasdelsur.io, so emails don't land in spam.
 - ~~Admin notification address~~: decided. `admin@subastasdelsur.io`.
@@ -205,7 +217,12 @@ Confirm these with the owner before the phase that needs them:
 - [x] 0 Foundations (2026-11-27): migration `0000_init` applied to production, with `auction`, `product` and `product_image`. Not yet created: the Better Auth tables, `auction.created_by` (phase 1), and the `bid` table plus the `product.leading_bid_id` FK (phase 5).
 - [x] 1 Auth, roles and bidder approval (2026-11-27): migration `0001_auth` applied to production, admin seeded (`npm run db:seed-admin`), full flow tested end to end, and real SMTP delivery tested once. Still to do in later phases: the terms pages (see Open decisions), a shared rate-limit store if we run more than one process, and the audit log (phase 7).
 - [x] 2 Admin: auctions (2026-11-27): create, edit, list, publish/unpublish/cancel/delete draft, dashboard counts. E2E tested: an admin in Tokyo and one in Los Angeles both set 19:00/18:00 Mexico City time and the stored UTC moment is correct. Publishing stays blocked until phase 3 adds products with photos.
-- [ ] 3 Admin: products and images
+- [x] 3 Admin: products and images (2026-11-27):
+  - Product create/edit/delete with lot numbers, starting price, increment and an optional reserve. Lot number and prices lock at the start; text and photos stay editable until the auction is cancelled.
+  - Photo upload to the VPS disk: one request per file, real type checked from the file's bytes, re-encoded by sharp to WebP with EXIF/GPS stripped. Cover and reorder, delete, and the files are removed with their product or auction.
+  - The `/media` route, `media:backup` and `media:sweep`.
+  - Fixed a phase 2 bug where correlated subqueries bound to the wrong row (now `lib/db/aggregates.ts`, with a DB regression test). Before the fix, product counts showed 0 and publishing was impossible.
+  - Uploads go through `proxy.ts`, so `experimental.proxyClientMaxBodySize` and `serverActions.bodySizeLimit` are both 12 MB.
 - [ ] 4 Public catalog
 - [ ] 5 Bidding
 - [ ] 6 Closing and results

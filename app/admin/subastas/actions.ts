@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, like, ne, sql } from "drizzle-orm";
+import { and, eq, like, ne } from "drizzle-orm";
 import { refresh, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import type { FormState } from "@/components/form";
@@ -8,7 +8,9 @@ import { type FieldErrors, parseAuctionText, parseAuctionWindow, parseAuctionWin
 import { requireAdmin } from "@/lib/dal";
 import { auction, getDb, product, productImage } from "@/lib/db";
 import type { Db } from "@/lib/db/client";
+import { auctionProductCount, auctionProductsWithoutImages } from "@/lib/db/aggregates";
 import { dbNow } from "@/lib/db/time";
+import { deleteKeys } from "@/lib/storage";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -106,7 +108,7 @@ export async function changeAuctionStatus(_prev: FormState, formData: FormData):
   const id = String(formData.get("id") ?? "");
   const intent = formData.get("intent");
 
-  const result = await getDb().transaction(async (tx): Promise<FormState & { deleted?: boolean }> => {
+  const result = await getDb().transaction(async (tx): Promise<FormState & { deleted?: boolean; keys?: string[] }> => {
     const [current] = await tx.select().from(auction).where(eq(auction.id, id)).for("update");
     if (!current) return { message: "No encontramos esta subasta." };
     const now = await dbNow(tx);
@@ -116,12 +118,9 @@ export async function changeAuctionStatus(_prev: FormState, formData: FormData):
       case "publish": {
         if (!can.publish) return { message: "Solo se puede publicar un borrador." };
         const [facts] = await tx
-          .select({
-            productCount: sql<number>`COUNT(*)`.mapWith(Number),
-            productsWithoutImages: sql<number>`COALESCE(SUM(NOT EXISTS (SELECT 1 FROM ${productImage} WHERE ${productImage.productId} = ${product.id})), 0)`.mapWith(Number),
-          })
-          .from(product)
-          .where(eq(product.auctionId, id));
+          .select({ productCount: auctionProductCount, productsWithoutImages: auctionProductsWithoutImages })
+          .from(auction)
+          .where(eq(auction.id, id));
         const problems = publishProblems({ ...current, ...facts }, now);
         if (problems.length) return { message: `No se puede publicar todavía: ${problems.join(" ")}` };
         await tx.update(auction).set({ status: "published" }).where(eq(auction.id, id));
@@ -141,8 +140,13 @@ export async function changeAuctionStatus(_prev: FormState, formData: FormData):
       case "delete": {
         if (!can.deleteDraft) return { message: "Solo se pueden eliminar borradores." };
         if (formData.get("confirm") !== "on") return { message: "Marca la casilla para confirmar que quieres eliminar el borrador." };
-        await tx.delete(auction).where(eq(auction.id, id)); // products and images cascade
-        return { ok: true, deleted: true };
+        const images = await tx
+          .select({ key: productImage.storageKey })
+          .from(productImage)
+          .innerJoin(product, eq(product.id, productImage.productId))
+          .where(eq(product.auctionId, id));
+        await tx.delete(auction).where(eq(auction.id, id)); // products and image rows cascade
+        return { ok: true, deleted: true, keys: images.map((i) => i.key) };
       }
       default:
         return { message: "Acción no válida." };
@@ -150,7 +154,10 @@ export async function changeAuctionStatus(_prev: FormState, formData: FormData):
   });
 
   if (result.ok) invalidate(id);
-  if (result.deleted) redirect("/admin/subastas?eliminada=1");
+  if (result.deleted) {
+    await deleteKeys(result.keys ?? []); // after the commit
+    redirect("/admin/subastas?eliminada=1");
+  }
   if (result.ok) refresh();
   return { ok: result.ok, message: result.message };
 }

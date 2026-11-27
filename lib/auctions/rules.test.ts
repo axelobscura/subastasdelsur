@@ -90,13 +90,22 @@ describe("displayState and permissions", () => {
 
   it("locks the window once a published auction starts", () => {
     expect(permissions({ status: "published", ...window }, before)).toMatchObject({ editWindow: true, unpublish: true, cancel: true, publish: false });
-    expect(permissions({ status: "published", ...window }, during)).toMatchObject({ editWindow: false, editText: true, unpublish: false, cancel: true });
+    expect(permissions({ status: "published", ...window }, during)).toMatchObject({ editWindow: false, editProducts: false, editProductContent: true, editText: true, unpublish: false, cancel: true });
     expect(permissions({ status: "published", ...window }, after)).toMatchObject({ editWindow: false, editText: true, cancel: false });
   });
 
   it("keeps drafts editable even after their dates pass, and cancelled auctions read-only", () => {
     expect(permissions({ status: "draft", ...window }, after)).toMatchObject({ editWindow: true, publish: true, deleteDraft: true });
-    expect(permissions({ status: "cancelled", ...window }, before)).toEqual({ editText: false, editWindow: false, publish: false, unpublish: false, cancel: false, deleteDraft: false });
+    expect(permissions({ status: "cancelled", ...window }, before)).toEqual({
+      editText: false,
+      editWindow: false,
+      editProducts: false,
+      editProductContent: false,
+      publish: false,
+      unpublish: false,
+      cancel: false,
+      deleteDraft: false,
+    });
   });
 });
 

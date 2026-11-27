@@ -120,8 +120,12 @@ export const DISPLAY_STATE_LABELS: Record<DisplayState, string> = {
 
 export type Permissions = {
   editText: boolean;
-  /** Times, timezone (and in phase 3: prices and the product list). */
+  /** Times and timezone. */
   editWindow: boolean;
+  /** Add/remove products and change lot numbers and prices. Locked from the start, like the window. */
+  editProducts: boolean;
+  /** Product text and photos (also after the start, until cancelled). */
+  editProductContent: boolean;
   publish: boolean;
   unpublish: boolean;
   cancel: boolean;
@@ -137,6 +141,8 @@ export function permissions(auction: AuctionState, now: Date): Permissions {
   return {
     editText: state !== "cancelled",
     editWindow: state === "draft" || state === "upcoming",
+    editProducts: state === "draft" || state === "upcoming",
+    editProductContent: state !== "cancelled",
     publish: state === "draft",
     unpublish: state === "upcoming",
     cancel: state === "draft" || state === "upcoming" || state === "live",
