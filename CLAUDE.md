@@ -4,9 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 @AGENTS.md
 
+## Implementation plan
+
+The full build plan covers scope, stack, data model, timezone rules, bidding rules, routes, phases and open decisions:
+
+@docs/PLAN.md
+
+Follow it, and keep its "Progress" checklist and "Open decisions" up to date as work lands. The timezone rules are the app's core requirement. Every auction instant is stored in UTC, admin input is interpreted in the auction's timezone on the server, and bid validity uses only the database clock.
+
+**The only database is the production MariaDB on the VPS. Development uses it too.** Before running any migration, seed, test or SQL against it, follow "Working against the production database" in the plan: back up first, migrations only, no destructive SQL without the owner's go-ahead. Connection and SSH details are in `.env.local` (gitignored). Never copy them into tracked files.
+
 ## Project state
 
-"Subastas del sur" (an auctions site) at a very early stage: a freshly bootstrapped `create-next-app` project. Only `app/page.tsx` has been customized (a heading). `app/layout.tsx` still has the template metadata ("Create Next App") and `lang="en"`. There's no backend, data layer, auth, or test setup yet.
+"Subastas del sur" (an auctions site) at a very early stage: a freshly bootstrapped `create-next-app` project. So far only `app/page.tsx` (a heading) and the metadata and `lang="es"` in `app/layout.tsx` have been customized. The site is in Spanish. There's no backend, data layer, auth, or test setup yet.
 
 ## Commands
 
