@@ -10,6 +10,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { eq } from "drizzle-orm";
+import { deleteTrackedSessions, trackSession } from "./helpers";
 
 const emailFile = process.env.EMAIL_DRY_RUN_FILE;
 test.skip(process.env.ALLOW_DB_TESTS !== "1" || !emailFile, "opt-in: ALLOW_DB_TESTS=1 and EMAIL_DRY_RUN_FILE");
@@ -43,11 +44,12 @@ const adminEmail = process.env.ADMIN_EMAIL!;
 const adminNotify = process.env.ADMIN_NOTIFICATION_EMAIL!;
 
 test.afterAll(async () => {
-  const { createDb, createPool } = await import("../lib/db/client");
-  const { user } = await import("../lib/db/schema");
+  const { createDb, createPool } = await import("../../lib/db/client");
+  const { user } = await import("../../lib/db/schema");
   const pool = createPool();
   await createDb(pool).delete(user).where(eq(user.email, bidderEmail)); // cascades sessions/accounts
   await pool.end();
+  await deleteTrackedSessions();
 });
 
 test("a bidder registers, confirms the email, and the admin approves them", async ({ browser }) => {
@@ -108,7 +110,8 @@ test("a bidder registers, confirms the email, and the admin approves them", asyn
   await admin.getByLabel("Correo electrónico").fill(adminEmail);
   await admin.getByLabel("Contraseña").fill(process.env.ADMIN_PASSWORD!);
   await admin.getByRole("button", { name: "Iniciar sesión" }).click();
-  await expect(admin).toHaveURL(/\/admin\/postores/);
+  await admin.waitForURL((url) => url.pathname === "/admin/postores");
+  await trackSession(admin);
   await admin.getByRole("link", { name: "[TEST] Postor de prueba" }).click();
   await expect(admin.getByText("Confirmó su correo y espera tu revisión.")).toBeVisible();
   await admin.getByRole("button", { name: "Aprobar" }).click();
@@ -122,5 +125,5 @@ test("a bidder registers, confirms the email, and the admin approves them", asyn
 
   // Don't leave an admin session behind in the production database
   await admin.getByRole("button", { name: "Cerrar sesión" }).click();
-  await expect(admin).toHaveURL(/\/$/);
+  await admin.waitForURL((url) => url.pathname === "/");
 });

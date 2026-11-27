@@ -110,6 +110,15 @@ Email lives in `lib/email/`:
 
 - Only `role = 'admin'`. Every Server Action and Route Handler re-checks with `requireAdmin()` from `lib/dal.ts` (`import 'server-only'`). `proxy.ts` only does the optimistic redirect to `/entrar`.
 - Auctions are created as `draft`. Publishing requires at least one product with at least one image, and a start time in the future.
+- The rules live in `lib/auctions/rules.ts` (pure, unit-tested); mutations are in `app/admin/subastas/actions.ts`. Each action locks the auction row (`SELECT … FOR UPDATE`), reads the **database clock** in the same transaction (`dbNow`, `lib/db/time.ts`) and re-checks the rules there.
+- The window lasts from 5 minutes to 60 days. On create, the start must be in the future. On edit, it must be in the future only if the start or timezone changes, so a draft can keep a past date until it's published. All problems are reported together.
+- The admin picks the auction's timezone from a short list (`lib/timezones.ts`; default `AUCTION_TIMEZONE`). While typing, the form previews each time in the auction's zone and in the admin's own local time.
+- Actions:
+  - **Publish:** draft → published, with the checks above.
+  - **Volver a borrador:** published and not yet started → draft.
+  - **Cancel:** draft, upcoming or live → cancelled, with a confirmation checkbox. Cancelled auctions are read-only.
+  - **Eliminar borrador:** drafts only, with a confirmation checkbox. Products and images cascade; deleting the image files from storage comes in phase 3.
+- A draft's slug follows its title. Once published, the slug (the public URL) never changes.
 - Once an auction is **live or ended**, its times, prices and product list are locked. Only text, images and cancelling stay editable. Cancelling a live auction needs confirmation and notifies bidders (phase 6).
 - Image upload: the client asks `createUploadUrl(productId, contentType, size)` (an admin Server Action) for a presigned PUT, uploads directly, then calls `attachImage(productId, key, width, height)`. Allow `image/jpeg|png|webp|avif` only, max ~10 MB, up to ~12 images per product. Reorder and delete in the UI. Delete the object from the bucket when its row is deleted.
 - Add the bucket's public host to `images.remotePatterns` in `next.config.ts`, then render with `next/image`.
@@ -195,7 +204,7 @@ Confirm these with the owner before the phase that needs them:
 
 - [x] 0 Foundations (2026-11-27): migration `0000_init` applied to production, with `auction`, `product` and `product_image`. Not yet created: the Better Auth tables, `auction.created_by` (phase 1), and the `bid` table plus the `product.leading_bid_id` FK (phase 5).
 - [x] 1 Auth, roles and bidder approval (2026-11-27): migration `0001_auth` applied to production, admin seeded (`npm run db:seed-admin`), full flow tested end to end, and real SMTP delivery tested once. Still to do in later phases: the terms pages (see Open decisions), a shared rate-limit store if we run more than one process, and the audit log (phase 7).
-- [ ] 2 Admin: auctions
+- [x] 2 Admin: auctions (2026-11-27): create, edit, list, publish/unpublish/cancel/delete draft, dashboard counts. E2E tested: an admin in Tokyo and one in Los Angeles both set 19:00/18:00 Mexico City time and the stored UTC moment is correct. Publishing stays blocked until phase 3 adds products with photos.
 - [ ] 3 Admin: products and images
 - [ ] 4 Public catalog
 - [ ] 5 Bidding

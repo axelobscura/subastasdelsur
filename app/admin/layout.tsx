@@ -17,9 +17,9 @@ export default function AdminLayout({ children }: LayoutProps<"/admin">) {
           <Link href="/admin/postores" className="hover:underline">
             Postores
           </Link>
-          <span className="text-zinc-400" title="Fase 2">
+          <Link href="/admin/subastas" className="hover:underline">
             Subastas
-          </span>
+          </Link>
           <form action={signOut} className="ml-auto">
             <button type="submit" className="hover:underline">
               Cerrar sesión

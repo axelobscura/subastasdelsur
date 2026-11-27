@@ -187,6 +187,14 @@ export function formatAuctionTime(instant: Date, timeZone: string, locale = "es-
     .concat(" ", zoneLabel(instant, timeZone, locale));
 }
 
+/** Compact version for tables, e.g. "5 dic 2026, 19:00 GMT-6". */
+export function formatAuctionTimeShort(instant: Date, timeZone: string, locale = "es-MX"): string {
+  partsFormatter(timeZone);
+  return new Intl.DateTimeFormat(locale, { timeZone, dateStyle: "medium", timeStyle: "short", hourCycle: "h23" })
+    .format(instant)
+    .concat(" ", zoneLabel(instant, timeZone, locale));
+}
+
 function zoneLabel(instant: Date, timeZone: string, locale: string): string {
   const part = new Intl.DateTimeFormat(locale, { timeZone, timeZoneName: "shortOffset" })
     .formatToParts(instant)

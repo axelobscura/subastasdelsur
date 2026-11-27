@@ -16,7 +16,7 @@ Follow it, and keep its "Progress" checklist and "Open decisions" up to date as 
 
 ## Project state
 
-Phases 0 (foundations) and 1 (auth, roles, admin approval of bidders) are done. See "Progress" in the plan. Auctions and products (phase 2 onwards) aren't built yet, and the home page is still a heading. The site is in Spanish (`lang="es"`).
+Phases 0–2 are done: foundations; auth, roles and admin approval of bidders; admin auctions with their time window. See "Progress" in the plan. Products and photos (phase 3) and the public site (phase 4 onwards) aren't built yet, and the home page is still a heading. The site is in Spanish (`lang="es"`).
 
 ## Commands
 
@@ -29,8 +29,8 @@ npm run typecheck    # tsc --noEmit
 npm test             # Vitest unit tests, run 3 times: TZ=UTC, Asia/Tokyo, America/Los_Angeles
 npx vitest run lib/time.test.ts -t "DST"   # one file / one test by name
 npm run test:e2e     # Playwright (e2e/), in Mexico City and Tokyo browser timezones; reuses a running dev server
-npm run test:e2e:flow # opt-in: production build on :3100 + registration/approval flow on the real DB (tunnel up);
-                      # emails are dry-run (no real email sent); creates and deletes one [TEST] bidder
+npm run test:e2e:flow # opt-in: production build on :3100 + the e2e/flows/ specs on the real DB (tunnel up);
+                      # emails are dry-run; [TEST] rows and test sessions are deleted in teardown
 
 npm run db:tunnel    # SSH tunnel to the VPS MariaDB (local 127.0.0.1:3307); keep open for any db:* / test:db
 npm run db:check     # read-only: version, session timezone (must be +00:00), tables
@@ -56,7 +56,12 @@ npx next typegen     # regenerate PageProps/LayoutProps route types after adding
   - `proxy.ts` is only an optimistic cookie check.
   - Forms are Server Actions with `useActionState` (`components/form.tsx`, `FormState`). Better Auth error codes map to Spanish in `lib/auth-errors.ts`.
 - `notFound()`/`redirect()` inside `<Suspense>` can't change the HTTP status, because streaming has already started. Test for the rendered 404 page, not for status 404.
-- Playwright: Next.js renders a hidden `role="alert"` route announcer, so filter `getByRole("alert")` by text.
+- Playwright:
+  - Next.js renders a hidden `role="alert"` route announcer, so filter `getByRole("alert")` by text.
+  - Wait for a URL by pathname (`waitForURL(url => url.pathname === …)`), because `/entrar?next=/admin` also "ends in /admin".
+  - Flow specs sign in with `adminPage()` from `e2e/flows/helpers.ts`, which records the session for teardown (`deleteTrackedSessions`).
+- Decisions about time (has it started? is the start in the future?) use `dbNow()` from `lib/db/time.ts`, never `new Date()`. Mutations lock the row with `.for("update")` inside a transaction.
+- Don't put `key={updatedAt}` on a `useActionState` form that refreshes on success: it remounts and loses the success message.
 - Email: `lib/email/send.ts` (`queueEmail` sends after the response). Set `EMAIL_DRY_RUN=1` to log instead of sending. Never send real emails from tests.
 - npm blocks dependency install scripts (esbuild, fsevents) until they're approved. Everything works without them, so don't approve them unasked.
 

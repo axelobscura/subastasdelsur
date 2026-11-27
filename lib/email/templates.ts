@@ -39,7 +39,7 @@ ${button}
 <p style="font-size:12px;color:#a1a1aa;margin-top:16px">${BRAND}</p>
 </td></tr></table>
 </body></html>`;
-  const strip = (s: string) => s.replace(/<[^>]+>/g, "").replaceAll("&amp;", "&").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&quot;", '"').replaceAll("&#39;", "'");
+  const strip = (s: string) => s.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replaceAll("&amp;", "&").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&quot;", '"').replaceAll("&#39;", "'");
   const text = [title, "", ...paragraphs.map(strip), ...(action ? ["", `${action.label}: ${action.url}`] : []), "", BRAND].join("\n");
   return { subject: `${title} · ${BRAND}`, html, text };
 }

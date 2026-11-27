@@ -9,6 +9,7 @@ import {
   NonexistentLocalTimeError,
   auctionPhase,
   formatAuctionTime,
+  formatAuctionTimeShort,
   instantToWallClock,
   isValidTimeZone,
   wallClockToInstant,
@@ -83,6 +84,14 @@ describe("formatAuctionTime", () => {
     expect(text).toMatch(/5 de diciembre de 2026/);
     expect(text).toMatch(/19:00/);
     expect(text).toMatch(/GMT-6/);
+  });
+});
+
+describe("formatAuctionTimeShort", () => {
+  it("is compact, in the auction zone, with the zone named", () => {
+    const text = formatAuctionTimeShort(new Date("2026-12-06T01:00:00.000Z"), MX);
+    expect(text).toMatch(/5 dic 2026/);
+    expect(text).toMatch(/19:00 GMT-6$/);
   });
 });
 

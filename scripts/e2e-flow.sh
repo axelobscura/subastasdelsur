@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the opt-in E2E flows that touch the production database (e2e/bidder-approval.spec.ts)
+# Run the opt-in E2E flows that touch the production database (e2e/flows/)
 # against a production build on port 3100. Emails are not sent: EMAIL_DRY_RUN writes them to
 # a temp file that the test reads. Needs `npm run db:tunnel` running.
 set -euo pipefail
@@ -20,7 +20,7 @@ for _ in $(seq 1 60); do
 done
 
 ALLOW_DB_TESTS=1 PLAYWRIGHT_BASE_URL="http://localhost:${PORT}" \
-  npx playwright test e2e/bidder-approval.spec.ts --project=mexico-city "$@" || {
+  npx playwright test e2e/flows --project=mexico-city "$@" || {
   status=$?
   echo "--- server log (${EMAIL_FILE}.server.log) ---"
   tail -n 60 "${EMAIL_FILE}.server.log"
