@@ -88,6 +88,11 @@ async function AuctionAdmin({
         ) : state === "ended" ? (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">Esta subasta ya terminó.</p>
         ) : null}
+        {state === "live" || state === "ended" ? (
+          <Link href={`/admin/subastas/${auction.id}/resultados`} className="self-start font-medium underline">
+            {state === "ended" ? "Ver resultados" : "Ver resultados parciales"}
+          </Link>
+        ) : null}
         <StatusActions id={auction.id} can={can} publishProblems={problems} />
       </section>
 

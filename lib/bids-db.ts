@@ -13,7 +13,7 @@ import { auctionPhase, type AuctionPhase } from "./time";
 
 type Executor = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-export type PlaceBidResult = { ok: true; bidId: string; amountCents: number } | { ok: false; error: BidError };
+export type PlaceBidResult = { ok: true; bidId: string; amountCents: number; previousLeaderId: string | null } | { ok: false; error: BidError };
 
 /**
  * Accept or reject one bid. In one transaction: lock the product row (FOR UPDATE), read the
@@ -55,7 +55,7 @@ export async function placeBidCore(db: Executor, input: { productId: string; use
       .update(product)
       .set({ currentPriceCents: input.amountCents, leadingBidId: bidId, bidCount: sql`${product.bidCount} + 1` })
       .where(eq(product.id, input.productId));
-    return { ok: true, bidId, amountCents: input.amountCents };
+    return { ok: true, bidId, amountCents: input.amountCents, previousLeaderId: leadingBidderId };
   });
 }
 

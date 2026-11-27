@@ -1,11 +1,13 @@
 "use server";
 
+import { after } from "next/server";
 import { BID_ERROR_MESSAGES, type BidError } from "@/lib/bids";
 import { type LotState, getLotState, placeBidCore } from "@/lib/bids-db";
 import { checkApprovedBidder } from "@/lib/dal";
 import { getDb } from "@/lib/db";
 import { formatMoney, parseMoneyToCents } from "@/lib/money";
 import { hit } from "@/lib/rate-limit";
+import { notifyOutbid } from "@/lib/settlement-db";
 
 export type BidResult = { ok: boolean; error?: BidError; message: string; state: LotState | null };
 
@@ -28,5 +30,15 @@ export async function placeBid(productId: string, amountInput: string): Promise<
   const result = await placeBidCore(getDb(), { productId, userId: user.id, amountCents });
   const fresh = await state(user.id);
   if (!result.ok) return { ok: false, error: result.error, message: BID_ERROR_MESSAGES[result.error], state: fresh };
+
+  // Tell whoever was leading, after the response (throttled to one email per lot every 10 min).
+  const previousLeaderId = result.previousLeaderId;
+  if (previousLeaderId && previousLeaderId !== user.id) {
+    after(() =>
+      notifyOutbid(getDb(), { productId, previousLeaderId }).catch((error: unknown) => {
+        console.error(`[bids] outbid email failed product=${productId}: ${error instanceof Error ? error.message : error}`);
+      }),
+    );
+  }
   return { ok: true, message: `¡Listo! Tu puja de ${formatMoney(result.amountCents)} es la más alta.`, state: fresh };
 }

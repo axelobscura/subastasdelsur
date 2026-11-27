@@ -37,7 +37,7 @@ Out of scope for v1: online payments, proxy/automatic bidding, multiple admins w
   - So: apply migrations **before** pushing code that needs them, and only push a build that passes.
 - **Production:** the Next.js app (`next build` + `next start`, kept alive by **pm2**) and MariaDB run on the same Hostinger VPS. The VPS runs **Node 22** (local dev has Node 24), so don't rely on anything newer than Node 22 and set `"engines": { "node": ">=22" }`. On the VPS the app connects to `127.0.0.1:3306`. The database port is **not** exposed to the internet. Secrets are set as environment variables on the VPS, never in the repo.
 - **Local development:** uses the same production database through an SSH tunnel, `ssh -N -L 3307:127.0.0.1:3306 -i <key> <user>@<vps-host>`. `npm run dev` opens it in the background if it isn't open (`scripts/ensure-tunnel.sh`), and `npm run db:tunnel:stop` closes it. Without it, public pages show the friendly error page (`app/(public)/error.tsx`). Local `DATABASE_URL` points at `127.0.0.1:3307`. The SSH host, user, key path and DB credentials are in `.env.local` (`SSH_*`, `DB_*`, `DATABASE_URL`). There's no separate dev database, by the owner's decision.
-- **Env files:** `.env*` is gitignored except `.env.example` (keys only). On the VPS, production needs: `DATABASE_URL` (port 3306), `BETTER_AUTH_URL` (the public `https://` URL), a production-only `BETTER_AUTH_SECRET`, `SMTP_*`, `EMAIL_FROM`, `ADMIN_NOTIFICATION_EMAIL` and `AUCTION_TIMEZONE`.
+- **Env files:** `.env*` is gitignored except `.env.example` (keys only). On the VPS, production needs: `DATABASE_URL` (port 3306), `BETTER_AUTH_URL` (the public `https://` URL), a production-only `BETTER_AUTH_SECRET`, `SMTP_*`, `EMAIL_FROM`, `ADMIN_NOTIFICATION_EMAIL`, `AUCTION_TIMEZONE`, `UPLOAD_DIR` and **`SETTLEMENT_WORKER=1`** (production only).
 
 ## Working against the production database
 
@@ -244,5 +244,15 @@ Confirm these with the owner before the phase that needs them:
   - "Mis pujas" in `/mi-cuenta`, live prices on the lot cards, and bid history with real names for the admin.
   - The "No listada" option on auctions.
   - E2E: two bidders in Mexico City and Tokyo bid against each other, the auction closes, and each sees "Ganaste" or "No ganaste".
-- [ ] 6 Closing and results
+- [x] 6 Closing and results (2026-11-27):
+  - Migration `0003_settlement` (`auction.settled_at` and a `notification` log), applied before the code was pushed.
+  - Settlement (`lib/settlement*.ts`) claims an auction with one atomic `UPDATE … WHERE settled_at IS NULL`, so it happens exactly once (tested with 3 racing callers).
+  - Each bidder gets one result email per auction: won, reserve not met, or not won. The admin gets a summary.
+  - Who settles:
+    - a worker in the production server process (`instrumentation.ts`, every 30 s, only with `SETTLEMENT_WORKER=1`, waiting 60 s after the end)
+    - the admin results page, right away
+  - Outbid emails go out right after the bid, throttled to one per bidder and lot every 10 minutes.
+  - Cancelling an auction emails its bidders.
+  - `/admin/subastas/<id>/resultados` shows the winner's email and phone, with a CSV download.
+  - Lot pages show "Vendido por …" or "No se vendió".
 - [ ] 7 Hardening

@@ -117,3 +117,83 @@ export function resetPasswordTemplate({ name, url }: { name: string; url: string
     action: { label: "Elegir nueva contraseña", url },
   });
 }
+
+export type EmailLot = { lotNumber: number; title: string; amount: string; url: string };
+
+const lotLine = (lot: EmailLot) => `<a href="${esc(lot.url)}">Lote ${lot.lotNumber}: ${esc(lot.title)}</a> · ${esc(lot.amount)}`;
+
+/** A bidder lost the top bid on a lot (throttled: at most every 10 minutes per lot). */
+export function outbidTemplate({ name, lot, auctionTitle, endsAt }: { name: string; lot: EmailLot; auctionTitle: string; endsAt: string }): Content {
+  return layout({
+    title: "Te superaron",
+    paragraphs: [
+      `Hola ${esc(name)}, alguien pujó más que tú en <strong>Lote ${lot.lotNumber}: ${esc(lot.title)}</strong> (${esc(auctionTitle)}).`,
+      `La puja actual es de <strong>${esc(lot.amount)}</strong>. La subasta cierra el ${esc(endsAt)}.`,
+    ],
+    action: { label: "Volver a pujar", url: lot.url },
+  });
+}
+
+/** One email per bidder when an auction ends: what they won, what didn't reach the reserve, what they didn't win. */
+export function auctionResultTemplate({
+  name,
+  auctionTitle,
+  won,
+  reserveNotMet,
+  notWon,
+  accountUrl,
+}: {
+  name: string;
+  auctionTitle: string;
+  won: EmailLot[];
+  reserveNotMet: EmailLot[];
+  notWon: EmailLot[];
+  accountUrl: string;
+}): Content {
+  const list = (lots: EmailLot[]) => lots.map(lotLine).join("<br>");
+  const paragraphs = [`Hola ${esc(name)}, la subasta <strong>${esc(auctionTitle)}</strong> terminó.`];
+  if (won.length) {
+    paragraphs.push(`<strong>¡Ganaste ${won.length === 1 ? "este lote" : `estos ${won.length} lotes`}!</strong>`, list(won));
+    paragraphs.push("Nuestro equipo te contactará muy pronto por correo o teléfono para coordinar el pago y la entrega.");
+  }
+  if (reserveNotMet.length) {
+    paragraphs.push("Tuviste la puja más alta, pero no se alcanzó el precio de reserva, así que estos lotes no se vendieron:", list(reserveNotMet));
+  }
+  if (notWon.length) paragraphs.push(`${won.length || reserveNotMet.length ? "Otros lotes en los que pujaste" : "Pujaste en estos lotes, pero otra persona hizo la puja más alta"}:`, list(notWon));
+  if (!won.length) paragraphs.push("Gracias por participar. Te esperamos en la próxima subasta.");
+  return {
+    ...layout({ title: won.length ? "¡Ganaste en la subasta!" : "Resultados de la subasta", paragraphs, action: { label: "Ver mis pujas", url: accountUrl } }),
+  };
+}
+
+/** To the admin when an auction ends. */
+export function adminAuctionSummaryTemplate(s: {
+  auctionTitle: string;
+  lots: number;
+  sold: number;
+  reserveNotMet: number;
+  noBids: number;
+  total: string;
+  resultsUrl: string;
+}): Content {
+  return layout({
+    title: `Terminó: ${s.auctionTitle}`,
+    paragraphs: [
+      `La subasta <strong>${esc(s.auctionTitle)}</strong> terminó y ya se avisó a los postores.`,
+      [`<strong>Vendidos:</strong> ${s.sold} de ${s.lots}`, `<strong>Reserva no alcanzada:</strong> ${s.reserveNotMet}`, `<strong>Sin pujas:</strong> ${s.noBids}`, `<strong>Total vendido:</strong> ${esc(s.total)}`].join("<br>"),
+    ],
+    action: { label: "Ver resultados", url: s.resultsUrl },
+  });
+}
+
+/** To everyone who bid when the admin cancels an auction. */
+export function auctionCancelledTemplate({ name, auctionTitle }: { name: string; auctionTitle: string }): Content {
+  return layout({
+    title: "Subasta cancelada",
+    paragraphs: [
+      `Hola ${esc(name)}, te avisamos que la subasta <strong>${esc(auctionTitle)}</strong> fue cancelada.`,
+      "Tus pujas en esta subasta ya no son válidas y no hay nada que pagar. Disculpa las molestias.",
+    ],
+    action: { label: "Ver otras subastas", url: appUrl("/subastas") },
+  });
+}

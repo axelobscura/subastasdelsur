@@ -103,6 +103,7 @@ test("two bidders in different timezones bid against each other, live", async ({
   const { auction } = await import("../../lib/db/schema");
   await withDb((db) => db.update(auction).set({ endsAt: sql`UTC_TIMESTAMP(3)` }).where(eq(auction.id, seeded.auctionId)));
   await expect(ana.getByText("Tu puja fue la más alta")).toBeVisible({ timeout: 10_000 });
+  await expect(ana.getByText(/¡Ganaste este lote!/)).toBeVisible();
   await expect(ana.getByLabel(/Tu puja/)).toHaveCount(0);
   await expect(beto.getByText("La subasta terminó: ya no se reciben pujas.")).toBeVisible({ timeout: 10_000 });
   await expect(beto.getByTestId("auction-clock")).toHaveAttribute("data-phase", "ended");
@@ -114,6 +115,44 @@ test("two bidders in different timezones bid against each other, live", async ({
   await beto.goto("/mi-cuenta");
   await expect(beto.getByTestId("my-bids")).toContainText("No ganaste");
 
+  // The lot page shows the outcome; outbid emails went to each bidder who lost the lead
+  await expect(ana.getByTestId("lot-outcome")).toHaveCount(0); // (Ana is on /mi-cuenta now)
+  await visitor.goto(lotUrl());
+  await expect(visitor.getByTestId("lot-outcome")).toHaveText("Vendido por $6,000.00.");
+  await expect.poll(async () => (await sentTo(people.ana.email)).filter((e) => e.subject.startsWith("Te superaron")).length).toBe(1);
+  await expect.poll(async () => (await sentTo(people.beto.email)).filter((e) => e.subject.startsWith("Te superaron")).length).toBe(1);
+
+  // Results: opening the page settles the auction (the production worker would do it a minute later)
+  await admin.goto(`/admin/subastas/${seeded.auctionId}/resultados`);
+  const results = admin.getByTestId("results-table");
+  await expect(results.getByRole("row").nth(1)).toContainText("Vendido");
+  await expect(results.getByRole("row").nth(1)).toContainText("$6,000.00");
+  await expect(results.getByRole("row").nth(1)).toContainText("[TEST] Ana");
+  await expect(admin.getByTestId("results-summary")).toContainText("1 de 1");
+  await expect.poll(async () => (await sentTo(people.ana.email)).some((e) => e.subject.startsWith("¡Ganaste"))).toBe(true);
+  await expect
+    .poll(async () => (await sentTo(people.beto.email)).find((e) => e.subject.startsWith("Resultados de la subasta"))?.text ?? "")
+    .toContain("otra persona hizo la puja más alta");
+  await admin.reload();
+  await expect(admin.getByText(/Avisos enviados a los postores el/)).toBeVisible();
+
+  // CSV export, admin only
+  const csv = await admin.request.get(`/admin/subastas/${seeded.auctionId}/resultados/csv`);
+  expect(csv.headers()["content-type"]).toContain("text/csv");
+  const body = await csv.text();
+  expect(body).toContain('"1","[TEST] Reloj en vivo","Vendido","6000.00","3","[TEST] Ana"');
+  expect((await visitor.request.get(`/admin/subastas/${seeded.auctionId}/resultados/csv`, { maxRedirects: 0 })).status()).not.toBe(200);
+
   await admin.goto("/admin");
   await signOut(admin);
 });
+
+async function sentTo(address: string): Promise<{ to: string; subject: string; text: string }[]> {
+  const { readFile } = await import("node:fs/promises");
+  const raw = await readFile(process.env.EMAIL_DRY_RUN_FILE!, "utf8").catch(() => "");
+  return raw
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as { to: string; subject: string; text: string })
+    .filter((e) => e.to === address);
+}

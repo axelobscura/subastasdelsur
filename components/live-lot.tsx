@@ -89,9 +89,19 @@ export function LiveLot({ initial, viewer, loginHref, auctionTimeZone }: Props) 
         </div>
       </dl>
 
-      {state.you?.isLeading ? (
+      {phase === "ended" && status === "published" ? (
+        <p className="text-sm font-medium" data-testid="lot-outcome">
+          {!hasBids ? "Sin pujas: este lote no se vendió." : state.reserve === "not_met" ? "No se vendió: no se alcanzó el precio de reserva." : `Vendido por ${formatMoney(state.currentPriceCents!)}.`}
+        </p>
+      ) : null}
+
+      {state.you?.isLeading && phase === "ended" && state.reserve === "not_met" ? (
+        <Notice tone="warning" title="Tu puja fue la más alta">
+          Pero no alcanzó el precio de reserva, así que el lote no se vendió.
+        </Notice>
+      ) : state.you?.isLeading ? (
         <Notice tone="success" title={phase === "ended" ? "Tu puja fue la más alta" : "Vas ganando"}>
-          {phase === "ended" ? "Te contactaremos con los siguientes pasos." : "Tienes la puja más alta en este lote."}
+          {phase === "ended" ? "¡Ganaste este lote! Te contactaremos con los siguientes pasos." : "Tienes la puja más alta en este lote."}
         </Notice>
       ) : state.you?.hasBid ? (
         <Notice tone="warning" title="Te superaron">

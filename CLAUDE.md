@@ -16,7 +16,7 @@ Follow it, and keep its "Progress" checklist and "Open decisions" up to date as 
 
 ## Project state
 
-Phases 0–5 are done: foundations; auth, roles and admin approval of bidders; admin auctions with their time window; products and photos; the public catalog; live bidding. See "Progress" in the plan. Closing, results and notifications (phase 6) are next.
+Phases 0–6 are done: foundations; auth, roles and admin approval of bidders; admin auctions with their time window; products and photos; the public catalog; live bidding; closing, results and notifications. See "Progress" in the plan. Hardening (phase 7) is next.
 
 **Pushing to `main` deploys to production** (https://subastasdelsur.io) within about a minute. See "Environments" in the plan. Only push builds that pass, and apply migrations first. The site is in Spanish (`lang="es"`).
 
@@ -73,6 +73,9 @@ npx next typegen     # regenerate PageProps/LayoutProps route types after adding
   - On the client, use `AuctionClock`/`useServerNow` (`components/clock.tsx`), which correct for the device clock.
   - Drafts are visible only to the admin (`getVisibleAuction` in `lib/catalog-access.ts`).
 - Bidding: rules in `lib/bids.ts` (pure); the transaction and the live state in `lib/bids-db.ts`. Never change `product.current_price_cents`, `leading_bid_id` or `bid_count` outside `placeBidCore`. Live data is never cached: lot pages read it per request and poll `/api/lotes/<id>/estado`.
+- Settlement (`lib/settlement-db.ts`) is the only code that emails auction results.
+  - Production runs it from `instrumentation.ts` when `SETTLEMENT_WORKER=1`. Never set that flag locally or in tests: they share the production DB.
+  - Tests call `settleAuction(db, id)` on their own auctions, never `settleDueAuctions`, and point `ADMIN_NOTIFICATION_EMAIL` at an `example.com` address.
 - The admin's own sessions on production are real (from the live site or `next dev`). Teardown deletes only the session tokens the tests recorded (`trackSession`), never sessions by user or user agent.
 - Flow specs run in parallel against one DB and one UPLOAD_DIR. Name rows with `testRunId()` (not `Date.now()`), delete only your own rows and files, and seed with `seedDraftAuction()`, `seedLiveUnlistedAuction()` and `seedBidder()`.
 - If `tsc`/`build` fails on `.next/dev/types/validator.ts` after moving routes, the running `next dev` has stale types: restart it, or move `.next/dev/types` aside.

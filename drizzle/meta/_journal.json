@@ -22,6 +22,13 @@
       "when": 1795801292275,
       "tag": "0002_bids",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1795802426776,
+      "tag": "0003_settlement",
+      "breakpoints": true
     }
   ]
 }

@@ -155,6 +155,11 @@ export const auction = mysqlTable(
     timezone: varchar("timezone", { length: 64 }).notNull(),
     /** Shown on the home page and /subastas. Unlisted auctions are reachable only by their link. */
     listed: boolean("listed").notNull().default(true),
+    /**
+     * When the auction was settled after its end (results computed, winners and admin emailed).
+     * Claimed with UPDATE … WHERE settled_at IS NULL, so it happens exactly once.
+     */
+    settledAt: utcDatetime("settled_at"),
     /** The admin who created it. Null for rows created before phase 1. */
     createdBy: varchar("created_by", { length: 36 }).references(() => user.id, { onDelete: "set null" }),
     ...timestamps,
@@ -237,6 +242,28 @@ export const bid = mysqlTable(
 );
 
 export type Bid = typeof bid.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Notifications (log, for idempotency and throttling of emails)
+// ---------------------------------------------------------------------------
+
+export const notificationKind = ["outbid", "auction_result", "admin_summary"] as const;
+export type NotificationKind = (typeof notificationKind)[number];
+
+export const notification = mysqlTable(
+  "notification",
+  {
+    id: id(),
+    userId: varchar("user_id", { length: 36 }).references(() => user.id, { onDelete: "cascade" }),
+    /** For admin summaries sent to ADMIN_NOTIFICATION_EMAIL (no user row). */
+    email: varchar("email", { length: 255 }),
+    kind: mysqlEnum("kind", notificationKind).notNull(),
+    auctionId: varchar("auction_id", { length: 36 }).references(() => auction.id, { onDelete: "cascade" }),
+    productId: varchar("product_id", { length: 36 }).references(() => product.id, { onDelete: "cascade" }),
+    createdAt: utcDatetime("created_at").notNull(),
+  },
+  (t) => [index("notification_user_product_kind_idx").on(t.userId, t.productId, t.kind, t.createdAt), index("notification_auction_idx").on(t.auctionId, t.kind)],
+);
 export type User = typeof user.$inferSelect;
 export type Auction = typeof auction.$inferSelect;
 export type NewAuction = typeof auction.$inferInsert;

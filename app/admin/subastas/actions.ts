@@ -10,6 +10,9 @@ import { auction, getDb, product, productImage } from "@/lib/db";
 import type { Db } from "@/lib/db/client";
 import { auctionProductCount, auctionProductsWithoutImages } from "@/lib/db/aggregates";
 import { dbNow } from "@/lib/db/time";
+import { queueEmail } from "@/lib/email/send";
+import { auctionCancelledTemplate } from "@/lib/email/templates";
+import { auctionBidders } from "@/lib/settlement-db";
 import { deleteKeys } from "@/lib/storage";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -111,7 +114,7 @@ export async function changeAuctionStatus(_prev: FormState, formData: FormData):
   const id = String(formData.get("id") ?? "");
   const intent = formData.get("intent");
 
-  const result = await getDb().transaction(async (tx): Promise<FormState & { deleted?: boolean; keys?: string[] }> => {
+  const result = await getDb().transaction(async (tx): Promise<FormState & { deleted?: boolean; keys?: string[]; notify?: { name: string; email: string }[]; title?: string }> => {
     const [current] = await tx.select().from(auction).where(eq(auction.id, id)).for("update");
     if (!current) return { message: "No encontramos esta subasta." };
     const now = await dbNow(tx);
@@ -138,7 +141,13 @@ export async function changeAuctionStatus(_prev: FormState, formData: FormData):
         if (!can.cancel) return { message: "Esta subasta ya no se puede cancelar." };
         if (formData.get("confirm") !== "on") return { message: "Marca la casilla para confirmar la cancelación." };
         await tx.update(auction).set({ status: "cancelled" }).where(eq(auction.id, id));
-        return { ok: true, message: "Subasta cancelada." };
+        const bidders = await auctionBidders(tx, id);
+        return {
+          ok: true,
+          message: bidders.length ? `Subasta cancelada. Avisamos por correo a ${bidders.length} postor${bidders.length === 1 ? "" : "es"}.` : "Subasta cancelada.",
+          notify: bidders,
+          title: current.title,
+        };
       }
       case "delete": {
         if (!can.deleteDraft) return { message: "Solo se pueden eliminar borradores." };
@@ -157,6 +166,9 @@ export async function changeAuctionStatus(_prev: FormState, formData: FormData):
   });
 
   if (result.ok) invalidate(id);
+  for (const bidder of result.notify ?? []) {
+    queueEmail("auction-cancelled", { to: bidder.email, ...auctionCancelledTemplate({ name: bidder.name, auctionTitle: result.title ?? "" }) });
+  }
   if (result.deleted) {
     await deleteKeys(result.keys ?? []); // after the commit
     redirect("/admin/subastas?eliminada=1");
