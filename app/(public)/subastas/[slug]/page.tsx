@@ -6,8 +6,10 @@ import { Suspense } from "react";
 import { AuctionTimes } from "@/components/auction-times";
 import { AuctionClock } from "@/components/clock";
 import { Notice, Skeleton } from "@/components/ui";
+import { getAuctionLiveSummary } from "@/lib/bids-db";
 import { getCatalogProducts } from "@/lib/catalog";
 import { getPublicAuctionTitle, getVisibleAuction } from "@/lib/catalog-access";
+import { getDb } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
 import { requestTime } from "@/lib/request-time";
 import { mediaUrl } from "@/lib/storage";
@@ -35,7 +37,7 @@ async function AuctionView({ params }: { params: Props["params"] }) {
   if (!visible) notFound();
   const { auction, preview } = visible;
   const serverNow = (await requestTime()).getTime();
-  const products = await getCatalogProducts(auction.id);
+  const [products, live] = await Promise.all([getCatalogProducts(auction.id), getAuctionLiveSummary(getDb(), auction.id)]);
 
   return (
     <>
@@ -77,7 +79,11 @@ async function AuctionView({ params }: { params: Props["params"] }) {
                   <div className="flex flex-col gap-1 p-4">
                     <p className="text-xs font-medium tracking-wide text-zinc-500 uppercase">Lote {p.lotNumber}</p>
                     <h3 className="font-semibold group-hover:underline">{p.title}</h3>
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">Precio de salida {formatMoney(p.startingPriceCents)}</p>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                      {live.get(p.id)?.bidCount && live.get(p.id)?.currentPriceCents != null
+                        ? `Puja actual ${formatMoney(live.get(p.id)!.currentPriceCents!)} · ${live.get(p.id)!.bidCount} ${live.get(p.id)!.bidCount === 1 ? "puja" : "pujas"}`
+                        : `Precio de salida ${formatMoney(p.startingPriceCents)}`}
+                    </p>
                   </div>
                 </Link>
               </li>

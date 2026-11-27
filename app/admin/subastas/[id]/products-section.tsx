@@ -35,6 +35,7 @@ export async function ProductsSection({ auctionId, canEditProducts }: { auctionI
                   <p className="text-sm text-zinc-600 dark:text-zinc-400">
                     Salida {formatMoney(p.startingPriceCents)} · incremento {formatMoney(p.minIncrementCents)}
                     {p.reservePriceCents != null ? ` · reserva ${formatMoney(p.reservePriceCents)}` : ""}
+                    {p.bidCount > 0 && p.currentPriceCents != null ? ` · puja actual ${formatMoney(p.currentPriceCents)} (${p.bidCount})` : ""}
                   </p>
                 </div>
                 <span className={`text-sm whitespace-nowrap ${p.imageCount ? "text-zinc-600 dark:text-zinc-400" : "font-medium text-amber-700 dark:text-amber-400"}`}>

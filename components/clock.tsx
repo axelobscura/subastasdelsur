@@ -18,8 +18,13 @@ export function useBrowserTimeZone(): string | null {
   return useSyncExternalStore(noopSubscribe, () => Intl.DateTimeFormat().resolvedOptions().timeZone, () => null);
 }
 
-export function useServerNow(serverNow: number, intervalMs = 1000): number {
-  const [offset] = useState(() => serverNow - Date.now());
+/**
+ * The current server time, ticking. `offsetOverride` lets a component that polls the server
+ * (LiveLot) re-sync the offset from each fresh `serverNow`.
+ */
+export function useServerNow(serverNow: number, intervalMs = 1000, offsetOverride?: number): number {
+  const [initialOffset] = useState(() => serverNow - Date.now());
+  const offset = offsetOverride ?? initialOffset;
   const [now, setNow] = useState(serverNow);
   useEffect(() => {
     const tick = () => setNow(Date.now() + offset);
@@ -50,8 +55,12 @@ const BADGE = {
 } as const;
 
 /** Phase badge plus countdown ("Empieza en…" / "Termina en…"), from the server clock. */
-export function AuctionClock({ startsAt, endsAt, serverNow, status, size = "sm" }: ClockProps) {
-  const now = useServerNow(serverNow);
+export function AuctionClock({ serverNow, ...props }: ClockProps) {
+  return <AuctionClockView {...props} now={useServerNow(serverNow)} />;
+}
+
+/** The same, for a component that already tracks the server time itself. */
+export function AuctionClockView({ startsAt, endsAt, now, status, size = "sm" }: Omit<ClockProps, "serverNow"> & { now: number }) {
   const phase = auctionPhase(new Date(startsAt), new Date(endsAt), new Date(now));
   const badge = status === "published" ? BADGE[phase] : BADGE[status];
   const text =

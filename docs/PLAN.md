@@ -47,7 +47,7 @@ Dev, migrations and any DB-touching tests all run against real data, so:
 - **Migrations only, never `drizzle-kit push`.** `drizzle-kit generate`, read the generated SQL, then `drizzle-kit migrate`. Destructive statements (`DROP`, `ALTER … DROP COLUMN`, narrowing a type) need the owner's explicit go-ahead first.
 - **No `TRUNCATE` or bulk `DELETE`** from scripts or by hand without confirmation. Seed scripts must be idempotent (upsert) and never wipe tables.
 - **Unit tests don't touch the DB.** Keep the rules in `lib/time.ts` and `lib/bids.ts` as pure functions. DB-writing tests (integration and E2E) only run with `ALLOW_DB_TESTS=1`. They create records whose titles start with `[TEST]`, as `draft` auctions or with test users, and they delete what they created in teardown.
-- **Test auctions must never be published** to the public site. Public queries only return `status = 'published'`, so drafts are invisible.
+- **Test auctions are never listed.** Most tests use drafts, which are invisible to the public. Bidding tests need a live auction, so they publish it as **unlisted** (`auction.listed = false`): it's reachable only by its random slug and never shown on the home page or `/subastas`. They delete it afterwards.
 - **Close the tunnel when it's not in use.** The database user should only have privileges on `subastasdelsur.*`.
 
 ## Timezone rules (core requirement)
@@ -209,7 +209,14 @@ Confirm these with the owner before the phase that needs them:
 - ~~Decision emails~~: decided. Yes, on approval and on rejection.
 - ~~Email verification~~: decided. Yes, before the admin reviews them.
 - **Terms and privacy notice** (before launch): `/registro` asks bidders to accept "términos y condiciones y aviso de privacidad", but those pages don't exist yet. The owner needs to provide the text.
-- **Bid rules** (phase 5): can someone bid if they're already leading? Fixed increment per product or price-tiered increments? Is the reserve shown publicly?
+- **Bid rules** (defaults built in phase 5, easy to change, owner to confirm):
+  - The leading bidder can't bid again.
+  - Each product has a fixed minimum increment.
+  - The reserve amount is never shown, but lots show "Precio de reserva alcanzado / no alcanzado" once they have one.
+  - Bids of 3× the minimum or more need a second click.
+  - Bids above max(10× minimum, minimum + 100 increments) are refused as typos.
+  - Bidders are anonymous to each other ("Postor N").
+  - Limit: 20 bids per minute per user.
 - **Soft close** (phase 7): wanted, and for how many minutes?
 
 ## Progress
@@ -230,6 +237,12 @@ Confirm these with the owner before the phase that needs them:
   - Drafts: the admin sees them as a marked preview; everyone else gets a 404, and a draft's title never goes into page metadata.
   - The bid area only shows the visitor's account status until phase 5.
   - Building no longer needs the database.
-- [ ] 5 Bidding
+- [x] 5 Bidding (2026-11-27):
+  - Migration `0002_bids` (the `bid` table, `product.leading_bid_id` FK, `auction.listed`), applied to production after a backup and before the code was pushed.
+  - `placeBidCore` (`lib/bids-db.ts`): locks the product row, decides with the DB clock and stores the bid's time from the DB clock. Tested on the real DB: 5 simultaneous bids for the same amount, exactly 1 accepted.
+  - The lot page's `LiveLot` polls `/api/lotes/<id>/estado` every 3 s while live (15 s in a background tab) and re-syncs the clock from each response.
+  - "Mis pujas" in `/mi-cuenta`, live prices on the lot cards, and bid history with real names for the admin.
+  - The "No listada" option on auctions.
+  - E2E: two bidders in Mexico City and Tokyo bid against each other, the auction closes, and each sees "Ganaste" or "No ganaste".
 - [ ] 6 Closing and results
 - [ ] 7 Hardening

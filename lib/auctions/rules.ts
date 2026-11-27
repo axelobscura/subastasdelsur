@@ -31,9 +31,11 @@ export type AuctionWindow = { timezone: string; startsAt: Date; endsAt: Date };
 export type FieldErrors = Record<string, string[] | undefined>;
 type Parsed<T> = { ok: true; data: T } | { ok: false; fieldErrors: FieldErrors };
 
-export function parseAuctionText(input: Record<string, unknown>): Parsed<AuctionText> {
+export function parseAuctionText(input: Record<string, unknown>): Parsed<AuctionText & { listed: boolean }> {
   const parsed = textFields.safeParse(input);
-  return parsed.success ? { ok: true, data: parsed.data } : { ok: false, fieldErrors: z.flattenError(parsed.error).fieldErrors };
+  // Checkbox: present ("on") when ticked. Forms always send listed=on|off via a hidden fallback.
+  const listed = input.listed !== "off" && input.listed !== undefined && input.listed !== "";
+  return parsed.success ? { ok: true, data: { ...parsed.data, listed } } : { ok: false, fieldErrors: z.flattenError(parsed.error).fieldErrors };
 }
 
 function toInstant(value: string, timeZone: string): Date | string {

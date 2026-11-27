@@ -11,7 +11,8 @@
  * `account`, `verification`), but with our UTC DATETIME(3) instead of TIMESTAMP. Extra
  * `user` fields are declared as `user.additionalFields` in lib/auth.ts, and the two must match.
  *
- * Not yet here: `bid` and the FK from `product.leading_bid_id` (phase 5).
+ * `product` and `bid` reference each other (`product.leading_bid_id` → `bid.id`), hence the
+ * `AnyMySqlColumn` thunks.
  */
 import { sql } from "drizzle-orm";
 import {
@@ -152,6 +153,8 @@ export const auction = mysqlTable(
     endsAt: utcDatetime("ends_at").notNull(),
     /** IANA zone used to show times and read admin input, e.g. America/Mexico_City. */
     timezone: varchar("timezone", { length: 64 }).notNull(),
+    /** Shown on the home page and /subastas. Unlisted auctions are reachable only by their link. */
+    listed: boolean("listed").notNull().default(true),
     /** The admin who created it. Null for rows created before phase 1. */
     createdBy: varchar("created_by", { length: 36 }).references(() => user.id, { onDelete: "set null" }),
     ...timestamps,
@@ -177,7 +180,7 @@ export const product = mysqlTable(
     reservePriceCents: cents("reserve_price_cents"),
     /** Denormalized from the leading bid; only written inside the bid transaction. */
     currentPriceCents: cents("current_price_cents"),
-    leadingBidId: varchar("leading_bid_id", { length: 36 }),
+    leadingBidId: varchar("leading_bid_id", { length: 36 }).references((): AnyMySqlColumn => bid.id, { onDelete: "set null" }),
     bidCount: int("bid_count", { unsigned: true }).notNull().default(0),
     position: int("position", { unsigned: true }).notNull().default(0),
     ...timestamps,
@@ -207,6 +210,33 @@ export const productImage = mysqlTable(
   (t) => [index("product_image_product_position_idx").on(t.productId, t.position)],
 );
 
+// ---------------------------------------------------------------------------
+// Bids
+// ---------------------------------------------------------------------------
+
+export const bid = mysqlTable(
+  "bid",
+  {
+    id: id(),
+    productId: varchar("product_id", { length: 36 })
+      .notNull()
+      .references((): AnyMySqlColumn => product.id, { onDelete: "cascade" }),
+    /** Bids are history: a user who has bid can't be deleted (restrict). */
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    amountCents: cents("amount_cents").notNull(),
+    /** The database clock at the moment the bid was accepted (UTC_TIMESTAMP(3)), never the client's. */
+    createdAt: utcDatetime("created_at").notNull(),
+  },
+  (t) => [
+    unique("bid_product_amount_unique").on(t.productId, t.amountCents),
+    index("bid_product_created_idx").on(t.productId, t.createdAt),
+    index("bid_user_created_idx").on(t.userId, t.createdAt),
+  ],
+);
+
+export type Bid = typeof bid.$inferSelect;
 export type User = typeof user.$inferSelect;
 export type Auction = typeof auction.$inferSelect;
 export type NewAuction = typeof auction.$inferInsert;

@@ -6,7 +6,7 @@ import { Field, FormMessage, type FormState, SubmitButton } from "@/components/f
 import { formatAuctionTime, wallClockToInstant } from "@/lib/time";
 import { AUCTION_TIMEZONES } from "@/lib/timezones";
 
-export type AuctionFormValues = { title: string; description: string; timezone: string; startsAt: string; endsAt: string };
+export type AuctionFormValues = { title: string; description: string; timezone: string; startsAt: string; endsAt: string; listed: string };
 
 type Props = {
   action: (prev: FormState, formData: FormData) => Promise<FormState>;
@@ -70,6 +70,15 @@ export function AuctionForm({ action, defaults, id, submitLabel, canEditWindow =
           />
           {errors.description ? <p className="text-sm text-red-700 dark:text-red-400">{errors.description[0]}</p> : null}
         </div>
+        <label className="flex items-start gap-2 text-sm">
+          {/* The hidden "off" is sent when the box is unticked; a ticked box overrides it. */}
+          <input type="hidden" name="listed" value="off" />
+          <input type="checkbox" name="listed" value="on" defaultChecked={values.listed !== "off"} className="mt-1" />
+          <span>
+            Mostrar en el listado público
+            <span className="block text-zinc-500">Si la desmarcas, la subasta solo se puede ver con su enlace directo.</span>
+          </span>
+        </label>
       </fieldset>
 
       <fieldset disabled={!canEditWindow} className="flex flex-col gap-4 rounded-lg border border-zinc-200 p-4 disabled:opacity-60 dark:border-zinc-800">

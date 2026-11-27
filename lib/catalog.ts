@@ -75,12 +75,18 @@ async function enrich(rows: Omit<CatalogAuction, "productCount" | "cover">[]): P
   });
 }
 
-/** Every published auction (for the home page and /subastas). */
+/** Every published, listed auction (for the home page and /subastas). */
 export async function getPublishedAuctions(): Promise<CatalogAuction[]> {
   "use cache";
   cacheTag("auctions");
   cacheLife("hours");
-  const rows = await getDb().select(auctionColumns).from(auction).where(eq(auction.status, "published")).orderBy(asc(auction.startsAt)).limit(500);
+  // Unlisted auctions are reachable only by their link (and are how tests bid on a live auction).
+  const rows = await getDb()
+    .select(auctionColumns)
+    .from(auction)
+    .where(and(eq(auction.status, "published"), eq(auction.listed, true)))
+    .orderBy(asc(auction.startsAt))
+    .limit(500);
   return enrich(rows);
 }
 

@@ -21,7 +21,7 @@ export default function NewAuctionPage() {
       <AuctionForm
         action={createAuction}
         submitLabel="Crear borrador"
-        defaults={{ title: "", description: "", timezone: defaultZone, startsAt: "", endsAt: "" }}
+        defaults={{ title: "", description: "", timezone: defaultZone, startsAt: "", endsAt: "", listed: "on" }}
       />
     </div>
   );

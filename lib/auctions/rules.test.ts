@@ -68,8 +68,10 @@ describe("parseAuctionWindowForEdit", () => {
 
 describe("parseAuctionText", () => {
   it("trims and validates title and description", () => {
-    const result = parseAuctionText({ title: "  Subasta de invierno ", description: " Piezas únicas " });
-    expect(result.ok && result.data).toEqual({ title: "Subasta de invierno", description: "Piezas únicas" });
+    const result = parseAuctionText({ title: "  Subasta de invierno ", description: " Piezas únicas ", listed: "on" });
+    expect(result.ok && result.data).toEqual({ title: "Subasta de invierno", description: "Piezas únicas", listed: true });
+    const unlisted = parseAuctionText({ title: "Privada", description: "", listed: "off" });
+    expect(unlisted.ok && unlisted.data.listed).toBe(false);
     expect(parseAuctionText({ title: "ab", description: "" }).ok).toBe(false);
   });
 });

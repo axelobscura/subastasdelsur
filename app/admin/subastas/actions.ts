@@ -14,10 +14,13 @@ import { deleteKeys } from "@/lib/storage";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-const FORM_KEYS = ["title", "description", "timezone", "startsAt", "endsAt"];
+const FORM_KEYS = ["title", "description", "timezone", "startsAt", "endsAt", "listed"];
 
 function formInput(formData: FormData): Record<string, string> {
-  return Object.fromEntries(FORM_KEYS.map((k) => [k, String(formData.get(k) ?? "")]));
+  const values = Object.fromEntries(FORM_KEYS.map((k) => [k, String(formData.get(k) ?? "")]));
+  // "listed" arrives twice when ticked (hidden "off" + checkbox "on"): any "on" wins.
+  values.listed = formData.getAll("listed").includes("on") ? "on" : "off";
+  return values;
 }
 
 /** Catalog caches (phase 4) are tagged with these. Invalidate them after every write. */

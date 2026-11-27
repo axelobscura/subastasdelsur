@@ -69,6 +69,7 @@ async function AuctionAdmin({
             /subastas/{auction.slug}
           </Link>
           {state === "draft" ? <span className="ml-2 text-xs text-zinc-500">(vista previa: solo tú la ves)</span> : null}
+          {!auction.listed ? <span className="ml-2 text-xs text-zinc-500">(no listada: solo con el enlace)</span> : null}
         </dd>
         {auction.createdByName ? (
           <>
@@ -110,6 +111,7 @@ async function AuctionAdmin({
             timezone: auction.timezone,
             startsAt: instantToWallClock(auction.startsAt, auction.timezone),
             endsAt: instantToWallClock(auction.endsAt, auction.timezone),
+            listed: auction.listed ? "on" : "off",
           }}
         />
       </section>

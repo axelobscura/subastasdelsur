@@ -3,14 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { AuctionTimes } from "@/components/auction-times";
-import { AuctionClock } from "@/components/clock";
 import { Gallery } from "@/components/gallery";
+import { LiveLot, type Viewer } from "@/components/live-lot";
 import { Notice, Skeleton } from "@/components/ui";
 import { getAuctionBySlug, getCatalogProduct, getNeighbourLots } from "@/lib/catalog";
 import { getVisibleAuction } from "@/lib/catalog-access";
+import { getLotState } from "@/lib/bids-db";
 import { getCurrentUser } from "@/lib/dal";
-import { formatMoney } from "@/lib/money";
-import { requestTime } from "@/lib/request-time";
+import { getDb } from "@/lib/db";
 import { mediaUrl } from "@/lib/storage";
 
 type Props = PageProps<"/subastas/[slug]/[lote]">;
@@ -46,7 +46,6 @@ async function LotView({ params }: { params: Props["params"] }) {
   const { auction, preview } = visible;
   const [item, neighbours] = await Promise.all([getCatalogProduct(auction.id, lot), getNeighbourLots(auction.id, lot)]);
   if (!item) notFound();
-  const serverNow = (await requestTime()).getTime();
 
   return (
     <>
@@ -82,22 +81,10 @@ async function LotView({ params }: { params: Props["params"] }) {
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium tracking-wide text-zinc-500 uppercase">Lote {item.lotNumber}</p>
             <h1 className="text-3xl font-semibold tracking-tight">{item.title}</h1>
-            <AuctionClock startsAt={auction.startsAt.getTime()} endsAt={auction.endsAt.getTime()} serverNow={serverNow} status={auction.status} size="lg" />
           </div>
 
-          <dl className="grid grid-cols-2 gap-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800" data-testid="lot-prices">
-            <div>
-              <dt className="text-sm text-zinc-500">Precio de salida</dt>
-              <dd className="text-2xl font-semibold tabular-nums">{formatMoney(item.startingPriceCents)}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-zinc-500">Incremento mínimo</dt>
-              <dd className="text-2xl font-semibold tabular-nums">{formatMoney(item.minIncrementCents)}</dd>
-            </div>
-          </dl>
-
-          <Suspense fallback={<Skeleton className="h-24" />}>
-            <BidArea slug={auction.slug} lot={item.lotNumber} />
+          <Suspense fallback={<Skeleton className="h-64" />}>
+            <LiveLotSection productId={item.id} slug={auction.slug} lot={item.lotNumber} auctionTimeZone={auction.timezone} />
           </Suspense>
 
           {item.description ? <p className="whitespace-pre-line text-zinc-700 dark:text-zinc-300">{item.description}</p> : null}
@@ -109,26 +96,11 @@ async function LotView({ params }: { params: Props["params"] }) {
   );
 }
 
-/** Who may bid. The bid form itself comes with phase 5. */
-async function BidArea({ slug, lot }: { slug: string; lot: number }) {
+/** Live price, bids and the bid form. Reads the session and live data, so it streams in. */
+async function LiveLotSection({ productId, slug, lot, auctionTimeZone }: { productId: string; slug: string; lot: number; auctionTimeZone: string }) {
   const user = await getCurrentUser();
-  const here = `/subastas/${slug}/${lot}`;
-  if (!user) {
-    return (
-      <Notice title="¿Quieres pujar?">
-        <Link href={`/entrar?next=${encodeURIComponent(here)}`} className="font-medium underline">
-          Inicia sesión
-        </Link>{" "}
-        o{" "}
-        <Link href="/registro" className="font-medium underline">
-          regístrate como postor
-        </Link>
-        . Nuestro equipo valida cada cuenta antes de habilitar las pujas.
-      </Notice>
-    );
-  }
-  if (user.role === "admin") return <Notice>Estás viendo la página como administrador.</Notice>;
-  if (user.approvalStatus === "pending") return <Notice tone="warning" title="Tu cuenta está en revisión">Podrás pujar en cuanto nuestro equipo apruebe tu cuenta. Te avisaremos por correo.</Notice>;
-  if (user.approvalStatus === "rejected") return <Notice tone="danger">Tu cuenta no fue aprobada para pujar.</Notice>;
-  return <Notice tone="success" title="Tu cuenta está aprobada">Muy pronto podrás pujar en línea desde aquí.</Notice>;
+  const state = await getLotState(getDb(), productId, user?.id ?? null);
+  if (!state) notFound();
+  const viewer: Viewer = !user ? "guest" : user.role === "admin" ? "admin" : user.approvalStatus === "approved" ? "approved" : user.approvalStatus;
+  return <LiveLot initial={state} viewer={viewer} loginHref={`/entrar?next=${encodeURIComponent(`/subastas/${slug}/${lot}`)}`} auctionTimeZone={auctionTimeZone} />;
 }

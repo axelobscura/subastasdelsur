@@ -3,9 +3,9 @@
  * Mutations are in app/admin/subastas/[id]/productos/actions.ts.
  */
 import "server-only";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { requireAdmin } from "../dal";
-import { type Product, type ProductImage, auction, getDb, product, productImage } from "../db";
+import { type Product, type ProductImage, auction, bid, getDb, product, productImage, user } from "../db";
 import { productCover, productImageCount } from "../db/aggregates";
 
 export type AdminProductRow = Product & { imageCount: number; coverKey: string | null; coverWidth: number | null; coverHeight: number | null };
@@ -49,4 +49,23 @@ export async function getProductForAdmin(auctionId: string, productId: string): 
   if (!row) return null;
   const images = await db.select().from(productImage).where(eq(productImage.productId, productId)).orderBy(asc(productImage.position), asc(productImage.createdAt));
   return { product: row.product, images };
+}
+
+export type AdminBidRow = { id: string; amountCents: number; createdAt: Date; bidderName: string; bidderEmail: string; leading: boolean };
+
+/** Every bid on a product, highest first, with the real bidder (admin only). */
+export async function getProductBids(productId: string): Promise<AdminBidRow[]> {
+  await requireAdmin();
+  const db = getDb();
+  const [[lot], rows] = await Promise.all([
+    db.select({ leadingBidId: product.leadingBidId }).from(product).where(eq(product.id, productId)),
+    db
+      .select({ id: bid.id, amountCents: bid.amountCents, createdAt: bid.createdAt, bidderName: user.name, bidderEmail: user.email })
+      .from(bid)
+      .innerJoin(user, eq(user.id, bid.userId))
+      .where(eq(bid.productId, productId))
+      .orderBy(desc(bid.amountCents))
+      .limit(500),
+  ]);
+  return rows.map((r) => ({ ...r, leading: r.id === lot?.leadingBidId }));
 }

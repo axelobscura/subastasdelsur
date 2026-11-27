@@ -5,11 +5,12 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Notice, Skeleton } from "@/components/ui";
 import { getAuctionForAdmin } from "@/lib/admin/auctions";
-import { getProductForAdmin } from "@/lib/admin/products";
+import { getProductBids, getProductForAdmin } from "@/lib/admin/products";
 import { permissions } from "@/lib/auctions/rules";
-import { CURRENCY, centsToInput } from "@/lib/money";
+import { CURRENCY, centsToInput, formatMoney } from "@/lib/money";
 import { MAX_IMAGES_PER_PRODUCT } from "@/lib/products/rules";
 import { mediaUrl } from "@/lib/storage";
+import { formatAuctionTimeShort } from "@/lib/time";
 import { updateProduct } from "../actions";
 import { ProductForm } from "../product-form";
 import { DeleteProduct } from "./delete-product";
@@ -80,6 +81,10 @@ async function ProductAdmin({ params, searchParams }: { params: Props["params"];
         {can.editProductContent ? <PhotoUploader auctionId={id} productId={pid} remaining={MAX_IMAGES_PER_PRODUCT - images.length} /> : null}
       </section>
 
+      <Suspense fallback={<Skeleton className="h-24" />}>
+        <BidsSection productId={pid} timezone={auction.timezone} />
+      </Suspense>
+
       <section aria-labelledby="datos" className="flex flex-col gap-3">
         <h2 id="datos" className="text-lg font-medium">
           Datos del producto
@@ -105,5 +110,45 @@ async function ProductAdmin({ params, searchParams }: { params: Props["params"];
 
       {can.editProducts ? <DeleteProduct auctionId={id} productId={pid} /> : null}
     </>
+  );
+}
+
+async function BidsSection({ productId, timezone }: { productId: string; timezone: string }) {
+  const bids = await getProductBids(productId);
+  return (
+    <section aria-labelledby="pujas" className="flex flex-col gap-3">
+      <h2 id="pujas" className="text-lg font-medium">
+        Pujas ({bids.length})
+      </h2>
+      {bids.length === 0 ? (
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">Todavía no hay pujas.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+          <table className="w-full text-left text-sm" data-testid="admin-bids">
+            <thead className="bg-zinc-50 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
+              <tr>
+                <th className="px-3 py-2 font-medium">Monto</th>
+                <th className="px-3 py-2 font-medium">Postor</th>
+                <th className="px-3 py-2 font-medium">Hora</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bids.map((b) => (
+                <tr key={b.id} className="border-t border-zinc-200 dark:border-zinc-800">
+                  <td className="px-3 py-2 tabular-nums">
+                    {formatMoney(b.amountCents)}
+                    {b.leading ? <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">Más alta</span> : null}
+                  </td>
+                  <td className="px-3 py-2">
+                    {b.bidderName} <span className="text-zinc-500">({b.bidderEmail})</span>
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">{formatAuctionTimeShort(b.createdAt, timezone)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

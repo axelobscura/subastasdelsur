@@ -28,18 +28,72 @@ export async function deleteTrackedSessions(): Promise<void> {
   await withDb((db) => db.delete(session).where(inArray(session.token, createdSessionTokens)));
 }
 
-/** A signed-in admin page in a browser emulating `timezoneId`. Call `signOut` at the end. */
-export async function adminPage(browser: Browser, timezoneId: string): Promise<Page> {
+/** A page signed in as `email` in a browser emulating `timezoneId`, sent to `next`. */
+export async function signedInPage(browser: Browser, timezoneId: string, email: string, password: string, next: string): Promise<Page> {
   const context = await browser.newContext({ timezoneId, locale: "es-MX" });
   const page = await context.newPage();
-  await page.goto("/entrar?next=/admin");
-  await page.getByLabel("Correo electrónico").fill(process.env.ADMIN_EMAIL!);
-  await page.getByLabel("Contraseña").fill(process.env.ADMIN_PASSWORD!);
+  await page.goto(`/entrar?next=${encodeURIComponent(next)}`);
+  await page.getByLabel("Correo electrónico").fill(email);
+  await page.getByLabel("Contraseña").fill(password);
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
   // Match the pathname: the sign-in URL itself (/entrar?next=/admin) also ends in "/admin".
-  await page.waitForURL((url) => url.pathname === "/admin");
+  await page.waitForURL((url) => url.pathname === next.split("?")[0]);
   await trackSession(page);
   return page;
+}
+
+/** A signed-in admin page in a browser emulating `timezoneId`. Call `signOut` at the end. */
+export async function adminPage(browser: Browser, timezoneId: string): Promise<Page> {
+  return signedInPage(browser, timezoneId, process.env.ADMIN_EMAIL!, process.env.ADMIN_PASSWORD!, "/admin");
+}
+
+/** A [TEST] bidder with a password (via Better Auth's own hashing). Delete it in teardown. */
+export async function seedBidder(name: string, approval: "approved" | "pending"): Promise<{ id: string; email: string; password: string }> {
+  const { auth } = await import("../../lib/auth");
+  const ctx = await auth.$context;
+  const email = `test-${testRunId()}@example.com`;
+  const password = `clave-${crypto.randomUUID()}`;
+  const created = await ctx.internalAdapter.createUser(
+    { email, name: `[TEST] ${name}`, phone: "5512345678", emailVerified: true, role: "bidder", approvalStatus: approval },
+    { method: "admin" },
+  );
+  await ctx.internalAdapter.linkAccount({ userId: created.id, providerId: "credential", accountId: created.id, password: await ctx.password.hash(password) });
+  return { id: created.id, email, password };
+}
+
+/**
+ * A published but *unlisted* [TEST] auction that is live now by the DB clock (never shown in the
+ * public lists; reachable only by its random slug). One lot with a photo. Returns ids and slug.
+ */
+export async function seedLiveUnlistedAuction(opts: { runId: string; startingPriceCents: number; minIncrementCents: number; minutes?: number }) {
+  const sharp = (await import("sharp")).default;
+  const { sql } = await import("drizzle-orm");
+  const { saveProductImage } = await import("../../lib/storage");
+  const { product, productImage } = await import("../../lib/db/schema");
+  const auctionId = crypto.randomUUID();
+  const productId = crypto.randomUUID();
+  const slug = `test-${opts.runId}-en-vivo`;
+  await withDb(async (db) => {
+    await db.execute(sql`
+      INSERT INTO auction (id, slug, title, description, status, listed, starts_at, ends_at, timezone, created_at, updated_at)
+      VALUES (${auctionId}, ${slug}, ${`[TEST] ${opts.runId} En vivo`}, '', 'published', false,
+              UTC_TIMESTAMP(3) - INTERVAL 1 MINUTE, UTC_TIMESTAMP(3) + INTERVAL ${opts.minutes ?? 15} MINUTE,
+              'America/Mexico_City', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`);
+    await db.insert(product).values({
+      id: productId,
+      auctionId,
+      lotNumber: 1,
+      position: 1,
+      title: "[TEST] Reloj en vivo",
+      description: "",
+      startingPriceCents: opts.startingPriceCents,
+      minIncrementCents: opts.minIncrementCents,
+    });
+    const jpeg = await sharp({ create: { width: 800, height: 600, channels: 3, background: "#996633" } }).jpeg().toBuffer();
+    const stored = await saveProductImage(productId, jpeg);
+    await db.insert(productImage).values({ productId, storageKey: stored.key, width: stored.width, height: stored.height, position: 0 });
+  });
+  return { auctionId, productId, slug };
 }
 
 /** Sign out, so no session is left in the production database. */
