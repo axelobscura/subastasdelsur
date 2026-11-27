@@ -2,25 +2,48 @@
   "name": "subastasdelsur",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "dev": "TZ=UTC next dev",
+    "build": "TZ=UTC next build",
+    "start": "TZ=UTC next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "TZ=UTC vitest run && TZ=Asia/Tokyo vitest run && TZ=America/Los_Angeles vitest run",
+    "test:watch": "TZ=UTC vitest",
+    "test:db": "ALLOW_DB_TESTS=1 TZ=Asia/Tokyo vitest run lib/db && ALLOW_DB_TESTS=1 TZ=America/Los_Angeles vitest run lib/db",
+    "test:e2e": "playwright test",
+    "db:tunnel": "bash scripts/db-tunnel.sh",
+    "db:backup": "bash scripts/db-backup.sh",
+    "db:check": "tsx scripts/db-check.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bash scripts/db-backup.sh && drizzle-kit migrate"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.4",
+    "mysql2": "^3.24.6",
     "next": "16.4.6",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@next/env": "^16.4.6",
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/turbopack": "4.3.3",
-    "@types/node": "^20",
+    "@types/node": "^22.20.7",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
-    "typescript": "^5"
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^5.1.2"
   }
 }

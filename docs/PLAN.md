@@ -21,10 +21,10 @@ Out of scope for v1: online payments, proxy/automatic bidding, multiple admins w
 | ORM / migrations | Drizzle ORM (`drizzle-orm/mysql2`, `mysqlTable`) + drizzle-kit (`dialect: 'mysql'`) with the `mysql2` driver | Schema in `lib/db/schema.ts`, migrations in `drizzle/`. Use a connection pool with `timezone: 'Z'` and run `SET time_zone = '+00:00'` on each new connection. |
 | Auth | Better Auth (email + password) with a `role` column (`admin` / `bidder`) | Use its Drizzle adapter. Create the admin with a seed script, never through public sign-up. |
 | Image storage | S3-compatible bucket (Cloudflare R2 or AWS S3) with presigned uploads | The browser uploads straight to the bucket, so the Server Action body limit doesn't apply. Wrapped in `lib/storage.ts` so the provider can be swapped. |
-| Dates/timezones | `@date-fns/tz` (`TZDate`) + `date-fns`, plus `Intl.DateTimeFormat` for display | Node 24 has no `Temporal`. Never use `new Date(string)` on wall-clock input. |
+| Dates/timezones | `lib/time.ts`, built only on `Intl.DateTimeFormat` (no date library) | Node 22/24 have no `Temporal`. Never use `new Date(string)` on wall-clock input. |
 | Validation | `zod` | Validate every Server Action input. |
 | Live updates | Client polling of a no-store Route Handler (every 3–5 s while live) | Simple and works on any host. The app runs as a long-lived Node process on the VPS, so moving to SSE later is possible and only touches the hook. |
-| Tests | Vitest (domain logic) + Playwright (E2E, with timezone emulation) | Neither exists yet. Added in phase 0. |
+| Tests | Vitest (domain logic) + Playwright (E2E, with timezone emulation) | `npm test` runs the unit suite under 3 process timezones. `npm run test:db` is opt-in and rolls back its writes. Playwright projects emulate `America/Mexico_City` and `Asia/Tokyo`. |
 
 ## Environments
 
@@ -47,7 +47,7 @@ Dev, migrations and any DB-touching tests all run against real data, so:
 
 1. **Store instants, not wall-clock times.** `auction.starts_at` and `auction.ends_at` are MariaDB `DATETIME(3)` columns that always hold **UTC** (Drizzle `datetime(..., { mode: 'date', fsp: 3 })`, with the connection pinned to UTC as described in the stack table). Never use `TIMESTAMP` (it converts through the session zone and ends in 2038). Also store `auction.timezone` (an IANA name, e.g. `America/Mexico_City`), but only for display and for interpreting admin input.
 2. **The auction timezone is a business setting, not the admin's browser zone.** `AUCTION_TIMEZONE=America/Mexico_City` (env) is the default for new auctions, and the admin form shows it explicitly ("Hora de: Ciudad de México").
-3. **Convert admin input on the server, in the auction's timezone.** `<input type="datetime-local">` posts a zone-less string like `2026-12-05T19:00`. The server action parses its parts and builds the instant with `new TZDate(y, m - 1, d, h, min, auction.timezone)`. Neither the server's own `TZ` nor the admin's browser zone is ever involved. Because of this, the same form input gives the same instant wherever the admin is. All of this lives in `lib/time.ts`: `wallClockToInstant(str, tz)` and `instantToWallClock(date, tz)`. Reject nonexistent DST-gap times, and for ambiguous ones take the earlier instant.
+3. **Convert admin input on the server, in the auction's timezone.** `<input type="datetime-local">` posts a zone-less string like `2026-12-05T19:00`. The server action converts it with `wallClockToInstant(value, auction.timezone)`. Neither the server's own `TZ` nor the admin's browser zone is ever involved. Because of this, the same form input gives the same instant wherever the admin is. All of this lives in `lib/time.ts`: `wallClockToInstant`, `instantToWallClock` (prefills `datetime-local`), `formatAuctionTime`, `auctionPhase` and `isValidTimeZone`. Nonexistent DST-gap times throw `NonexistentLocalTimeError`, and ambiguous ones resolve to the earlier instant.
 4. **The server's database clock decides everything.** Whether an auction is upcoming, live or ended, and whether a bid is on time, is decided with the database's `UTC_TIMESTAMP(3)` inside the bid transaction. Don't use `NOW()`, because it depends on the session timezone. The client's clock and timezone never affect validity.
 5. **Display shows the auction's zone and labels it.** Server-rendered dates always pass an explicit `timeZone: auction.timezone` and `timeZoneName: 'short'` to `Intl.DateTimeFormat('es-…')`. Omitting `timeZone` on the server silently uses the host's zone (often UTC) and causes hydration mismatches. A small client component may add "Tu hora local: …" after mount, using the browser's zone.
 6. **Countdowns correct for clock skew.** Pages send the server's current time with the auction state. The client keeps `offset = serverNow - Date.now()` and counts down to `ends_at` using `Date.now() + offset`. A wrong device clock then can't make the timer lie. The server still has the final word (rule 4).
@@ -152,7 +152,7 @@ Confirm these with the owner before the phase that needs them:
 
 ## Progress
 
-- [ ] 0 Foundations
+- [x] 0 Foundations (2026-11-27): migration `0000_init` applied to production, with `auction`, `product` and `product_image`. Not yet created: the Better Auth tables, `auction.created_by` (phase 1), and the `bid` table plus the `product.leading_bid_id` FK (phase 5).
 - [ ] 1 Auth and roles
 - [ ] 2 Admin: auctions
 - [ ] 3 Admin: products and images
