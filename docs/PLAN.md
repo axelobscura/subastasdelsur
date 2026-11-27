@@ -20,7 +20,7 @@ Out of scope for v1: online payments, proxy/automatic bidding, multiple admins w
 | Database | **MariaDB 11.8** on the Hostinger production VPS (database and user `subastasdelsur`; InnoDB, utf8mb4/`utf8mb4_unicode_ci`; server and system timezone UTC) | This is the **only** database. Development uses it too (see "Environments" and "Working against the production database"). Credentials live only in `.env.local` and the VPS environment. |
 | ORM / migrations | Drizzle ORM (`drizzle-orm/mysql2`, `mysqlTable`) + drizzle-kit (`dialect: 'mysql'`) with the `mysql2` driver | Schema in `lib/db/schema.ts`, migrations in `drizzle/`. Use a connection pool with `timezone: 'Z'` and run `SET time_zone = '+00:00'` on each new connection. |
 | Auth | Better Auth (email + password) with `role` (`admin` / `bidder`) and `approval_status` columns | Use its Drizzle adapter. Create the admin with a seed script, never through public sign-up. Bidders need the admin's approval (see "Bidder registration and approval"). |
-| Email | Transactional email through a provider wrapped in `lib/email/` (provider to be decided) | Used for registration and approval notices now, and outbid/winner notices in phase 6. Templates in Spanish, sent after the response with `after()`. |
+| Email | Hostinger mailbox `admin@subastasdelsur.io` over SMTP (nodemailer), wrapped in `lib/email/` | Used for registration and approval notices now, and outbid/winner notices in phase 6. Templates in Spanish, sent after the response with `after()`. |
 | Image storage | S3-compatible bucket (Cloudflare R2 or AWS S3) with presigned uploads | The browser uploads straight to the bucket, so the Server Action body limit doesn't apply. Wrapped in `lib/storage.ts` so the provider can be swapped. |
 | Dates/timezones | `lib/time.ts`, built only on `Intl.DateTimeFormat` (no date library) | Node 22/24 have no `Temporal`. Never use `new Date(string)` on wall-clock input. |
 | Validation | `zod` | Validate every Server Action input. |
@@ -31,7 +31,7 @@ Out of scope for v1: online payments, proxy/automatic bidding, multiple admins w
 
 - **Production:** the Next.js app (`next build` + `next start`, kept alive by **pm2**, which is already installed) and MariaDB run on the same Hostinger VPS. The VPS runs **Node 22** (local dev has Node 24), so don't rely on anything newer than Node 22 and set `"engines": { "node": ">=22" }`. On the VPS the app connects to `127.0.0.1:3306`. The database port is **not** exposed to the internet. Secrets are set as environment variables on the VPS, never in the repo.
 - **Local development:** uses the same production database through an SSH tunnel, `ssh -N -L 3307:127.0.0.1:3306 -i <key> <user>@<vps-host>`. Local `DATABASE_URL` points at `127.0.0.1:3307`. The SSH host, user, key path and DB credentials are in `.env.local` (`SSH_*`, `DB_*`, `DATABASE_URL`). There's no separate dev database, by the owner's decision.
-- **Env files:** `.env*` is gitignored. To commit a `.env.example` (keys only), add `!.env.example` to `.gitignore`.
+- **Env files:** `.env*` is gitignored except `.env.example` (keys only). On the VPS, production needs: `DATABASE_URL` (port 3306), `BETTER_AUTH_URL` (the public `https://` URL), a production-only `BETTER_AUTH_SECRET`, `SMTP_*`, `EMAIL_FROM`, `ADMIN_NOTIFICATION_EMAIL` and `AUCTION_TIMEZONE`.
 
 ## Working against the production database
 
@@ -89,22 +89,22 @@ Later: soft close (anti-sniping, where a bid in the last N minutes pushes back t
 
 ## Bidder registration and approval
 
-Bidders can't bid until the admin approves them.
+Bidders can't bid until the admin approves them. Built in phase 1; `npm run test:e2e:flow` tests the whole flow.
 
-1. **Registration** (`/registro`): name, email, password, phone and acceptance of the terms. The exact field list is to be confirmed (see Open decisions). Validate it with zod. The account is created with `role = 'bidder'` and `approval_status = 'pending'`.
-2. **Two emails go out after the response is sent** (with `after()` from `next/server`, so a slow or failing email provider never breaks registration):
-   - **To the bidder:** "Recibimos tu registro". It confirms the account was created and that **access is being validated by the team**. They'll get another email once it's reviewed, and they can't bid until then.
-   - **To the admin** (`ADMIN_NOTIFICATION_EMAIL`): "Nuevo postor por aprobar", with the bidder's details (name, email, phone, any other registration fields, registration date and time in the auction timezone via `formatAuctionTime`) and a link to `/admin/postores/<id>`.
-3. **A pending bidder can sign in** and browse. `/mi-cuenta` and the bid form show "Tu cuenta está en revisión" instead of letting them bid. Rejected bidders see that the account wasn't approved, with a contact line.
-4. **The admin reviews** at `/admin/postores` (tabs: pendientes / aprobados / rechazados; the pending count shows in the dashboard nav). Opening a bidder shows all their data, with **Aprobar** and **Rechazar** (optional note). The Server Actions call `requireAdmin()`, set `approval_status`, `reviewed_at`, `reviewed_by` and `review_note`, and write to the audit log once it exists (phase 7).
-5. **Decision emails** to the bidder: "Tu cuenta fue aprobada" (with a link to the live and upcoming auctions) or "Tu cuenta no fue aprobada" (with the note, if any). These are proposed rather than requested; see Open decisions.
-6. **The admin can revoke** an approved bidder (set them back to `rejected`). Their existing bids stay. This is a phase 7 refinement.
-7. **Email failures are never lost work.** Pending bidders always appear in `/admin/postores` whether or not the admin email arrived. Failures are logged (`console.error` for pm2 logs) with the recipient and template, never the content.
+1. **Registration** (`/registro`, Server Action `app/registro/actions.ts`): name, email, phone, password and acceptance of the terms (`lib/validation/auth.ts`, rate limited per IP). The account is created with `role = 'bidder'`, `approval_status = 'pending'` and `terms_accepted_at`. Better Auth's public sign-up endpoint is disabled, so this action is the only way in.
+2. **Email confirmation comes first.** Registration sends "Confirma tu correo", with a 24-hour link. The email already explains that **after confirming, the team will validate their access** and that they can't bid until then. Unconfirmed users can't sign in; trying to sends them the link again.
+3. **When they confirm** (Better Auth `afterEmailVerification`), they're signed in and land on `/cuenta-confirmada`. Two emails go out after the response (`queueEmail` → `after()`):
+   - **To the bidder:** "Tu acceso está en validación".
+   - **To the admin** (`ADMIN_NOTIFICATION_EMAIL`): "Nuevo postor por aprobar". It has the name, email, phone, registration time in Mexico City time and a link to `/admin/postores/<id>`, and Reply-To is set to the bidder.
+4. **A pending bidder can sign in** and browse. `/mi-cuenta` (and the bid form in phase 5) shows "Tu cuenta está en revisión". Rejected bidders see that the account wasn't approved, with a contact line.
+5. **The admin reviews** at `/admin/postores`, with tabs for pendientes, aprobados, rechazados and sin confirmar correo; the dashboard shows the counts. A bidder's page shows their data, with **Aprobar**, **Rechazar** (optional note) and **Revocar aprobación**. The Server Action re-checks `requireAdmin()`, only acts on confirmed bidder accounts, and records `reviewed_at`, `reviewed_by` and `review_note`.
+6. **Decision emails** go to the bidder: "Tu cuenta fue aprobada" or "Tu cuenta no fue aprobada" (with the note).
+7. **Email failures are never lost work.** Confirmed pending bidders always appear in `/admin/postores`. Failures are logged (pm2 logs) with the template and recipient, never the content.
 
 Email lives in `lib/email/`:
-- `send.ts`: the provider adapter, `sendEmail({ to, subject, html, text })`.
-- `templates.ts`: plain HTML and text templates in Spanish, with every user-supplied value escaped.
-- In development with `EMAIL_DRY_RUN=1`, emails are logged instead of sent.
+- `send.ts`: SMTP through the Hostinger mailbox `admin@subastasdelsur.io` (nodemailer, port 465), plus `queueEmail`.
+- `templates.ts`: HTML and text templates in Spanish, with every user value escaped.
+- With `EMAIL_DRY_RUN=1`, emails are logged instead of sent. `EMAIL_DRY_RUN_FILE` also writes them as JSON lines for E2E tests.
 
 ## Admin rules
 
@@ -182,18 +182,19 @@ Confirm these with the owner before the phase that needs them:
 - **Image storage** (phase 3): R2 or S3 bucket, or the VPS disk (for example `/var/www/subastasdelsur-uploads` served by the web server, with the same `lib/storage.ts` interface). The disk is simpler but needs its own backups and counts against the VPS's space.
 - **Currency** (phase 3): MXN, ARS, CLP, USD…
 - ~~Bidder sign-up~~: decided. The admin approves every bidder. On registration the bidder gets an email saying their access is being validated, and the admin gets an email with the bidder's details.
-- **Email provider** (phase 1): an SMTP mailbox on the domain (for example a Hostinger mailbox, via `nodemailer`), or an email API such as Resend or Amazon SES. Needs the sending address (e.g. `no-reply@<domain>`), with SPF/DKIM set up on the domain so emails don't land in spam.
-- **Admin notification address** (phase 1): which inbox receives "Nuevo postor por aprobar" (`ADMIN_NOTIFICATION_EMAIL`)?
-- **Registration fields** (phase 1): name, email, phone and password, plus anything else the admin needs in order to validate someone (city/state, ID number, RFC, address…)?
-- **Decision emails** (phase 1): should bidders also be emailed when they're approved or rejected? Proposed: yes.
-- **Email verification** (phase 1): should bidders also confirm their email address with a link before the admin reviews them? Proposed: yes, because it stops fake addresses reaching the approval queue.
+- ~~Email provider~~: decided. The Hostinger mailbox `admin@subastasdelsur.io` over SMTP. To check: SPF/DKIM/DMARC for subastasdelsur.io, so emails don't land in spam.
+- ~~Admin notification address~~: decided. `admin@subastasdelsur.io`.
+- ~~Registration fields~~: decided. Name, email, phone and password, plus accepting the terms.
+- ~~Decision emails~~: decided. Yes, on approval and on rejection.
+- ~~Email verification~~: decided. Yes, before the admin reviews them.
+- **Terms and privacy notice** (before launch): `/registro` asks bidders to accept "términos y condiciones y aviso de privacidad", but those pages don't exist yet. The owner needs to provide the text.
 - **Bid rules** (phase 5): can someone bid if they're already leading? Fixed increment per product or price-tiered increments? Is the reserve shown publicly?
 - **Soft close** (phase 7): wanted, and for how many minutes?
 
 ## Progress
 
 - [x] 0 Foundations (2026-11-27): migration `0000_init` applied to production, with `auction`, `product` and `product_image`. Not yet created: the Better Auth tables, `auction.created_by` (phase 1), and the `bid` table plus the `product.leading_bid_id` FK (phase 5).
-- [ ] 1 Auth and roles
+- [x] 1 Auth, roles and bidder approval (2026-11-27): migration `0001_auth` applied to production, admin seeded (`npm run db:seed-admin`), full flow tested end to end, and real SMTP delivery tested once. Still to do in later phases: the terms pages (see Open decisions), a shared rate-limit store if we run more than one process, and the audit log (phase 7).
 - [ ] 2 Admin: auctions
 - [ ] 3 Admin: products and images
 - [ ] 4 Public catalog

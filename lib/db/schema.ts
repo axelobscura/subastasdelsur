@@ -7,12 +7,17 @@
  * - Money is integer cents in BIGINT (`*_cents`).
  * - IDs are `varchar(36)` UUIDs, matching the string IDs Better Auth uses (FK types must match).
  *
- * Not yet here: Better Auth tables + `auction.created_by` (phase 1), `bid` and the FK from
- * `product.leading_bid_id` (phase 5).
+ * Better Auth tables follow the field names its Drizzle adapter expects (`user`, `session`,
+ * `account`, `verification`), but with our UTC DATETIME(3) instead of TIMESTAMP. Extra
+ * `user` fields are declared as `user.additionalFields` in lib/auth.ts, and the two must match.
+ *
+ * Not yet here: `bid` and the FK from `product.leading_bid_id` (phase 5).
  */
 import { sql } from "drizzle-orm";
 import {
+  type AnyMySqlColumn,
   bigint,
+  boolean,
   check,
   datetime,
   index,
@@ -43,6 +48,93 @@ const timestamps = {
     .$onUpdateFn(() => new Date()),
 };
 
+// ---------------------------------------------------------------------------
+// Auth (Better Auth)
+// ---------------------------------------------------------------------------
+
+export const userRole = ["admin", "bidder"] as const;
+export type UserRole = (typeof userRole)[number];
+
+export const approvalStatus = ["pending", "approved", "rejected"] as const;
+export type ApprovalStatus = (typeof approvalStatus)[number];
+
+export const user = mysqlTable(
+  "user",
+  {
+    id: id(),
+    name: varchar("name", { length: 255 }).notNull(),
+    email: varchar("email", { length: 255 }).notNull().unique("user_email_unique"),
+    emailVerified: boolean("email_verified").notNull().default(false),
+    image: text("image"),
+    ...timestamps,
+    role: mysqlEnum("role", userRole).notNull().default("bidder"),
+    /** Bidders can't bid until the admin approves them (PLAN "Bidder registration and approval"). */
+    approvalStatus: mysqlEnum("approval_status", approvalStatus).notNull().default("pending"),
+    phone: varchar("phone", { length: 32 }).notNull(),
+    termsAcceptedAt: utcDatetime("terms_accepted_at"),
+    reviewedAt: utcDatetime("reviewed_at"),
+    reviewedBy: varchar("reviewed_by", { length: 36 }).references((): AnyMySqlColumn => user.id, {
+      onDelete: "set null",
+    }),
+    reviewNote: varchar("review_note", { length: 1000 }),
+  },
+  (t) => [index("user_role_approval_idx").on(t.role, t.approvalStatus, t.createdAt)],
+);
+
+export const session = mysqlTable(
+  "session",
+  {
+    id: id(),
+    expiresAt: utcDatetime("expires_at").notNull(),
+    token: varchar("token", { length: 255 }).notNull().unique("session_token_unique"),
+    ...timestamps,
+    ipAddress: varchar("ip_address", { length: 64 }),
+    userAgent: text("user_agent"),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (t) => [index("session_user_id_idx").on(t.userId)],
+);
+
+export const account = mysqlTable(
+  "account",
+  {
+    id: id(),
+    accountId: varchar("account_id", { length: 255 }).notNull(),
+    providerId: varchar("provider_id", { length: 64 }).notNull(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: utcDatetime("access_token_expires_at"),
+    refreshTokenExpiresAt: utcDatetime("refresh_token_expires_at"),
+    scope: text("scope"),
+    /** Password hash (credential provider). */
+    password: text("password"),
+    ...timestamps,
+  },
+  (t) => [index("account_user_id_idx").on(t.userId)],
+);
+
+export const verification = mysqlTable(
+  "verification",
+  {
+    id: id(),
+    identifier: varchar("identifier", { length: 255 }).notNull(),
+    value: text("value").notNull(),
+    expiresAt: utcDatetime("expires_at").notNull(),
+    ...timestamps,
+  },
+  (t) => [index("verification_identifier_idx").on(t.identifier)],
+);
+
+// ---------------------------------------------------------------------------
+// Auctions
+// ---------------------------------------------------------------------------
+
 export const auctionStatus = ["draft", "published", "cancelled"] as const;
 export type AuctionStatus = (typeof auctionStatus)[number];
 
@@ -60,6 +152,8 @@ export const auction = mysqlTable(
     endsAt: utcDatetime("ends_at").notNull(),
     /** IANA zone used to show times and read admin input, e.g. America/Mexico_City. */
     timezone: varchar("timezone", { length: 64 }).notNull(),
+    /** The admin who created it. Null for rows created before phase 1. */
+    createdBy: varchar("created_by", { length: 36 }).references(() => user.id, { onDelete: "set null" }),
     ...timestamps,
   },
   (t) => [
@@ -113,6 +207,7 @@ export const productImage = mysqlTable(
   (t) => [index("product_image_product_position_idx").on(t.productId, t.position)],
 );
 
+export type User = typeof user.$inferSelect;
 export type Auction = typeof auction.$inferSelect;
 export type NewAuction = typeof auction.$inferInsert;
 export type Product = typeof product.$inferSelect;

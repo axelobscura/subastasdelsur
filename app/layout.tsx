@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Subastas del sur",
+  title: { default: "Subastas del sur", template: "%s · Subastas del sur" },
   description: "Subastas del sur: subastas en línea.",
 };
 
