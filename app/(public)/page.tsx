@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AuctionGrid } from "@/components/auction-card";
 import { CountdownBoard } from "@/components/countdown-board";
+import { IconChevronRight, IconGavel, IconShieldCheck, IconTrophy, IconUserPlus } from "@/components/icons";
 import { Skeleton } from "@/components/ui";
 import { groupByPhase } from "@/lib/auctions/rules";
 import { getPublishedAuctions, type CatalogAuction } from "@/lib/catalog";
@@ -19,10 +20,15 @@ export default function Home() {
               Puja desde tu celular o tu computadora. Cada subasta abre y cierra en el mismo instante para todos los postores, estés donde estés.
             </p>
             <div className="flex flex-wrap gap-3 pt-1">
-              <Link href="/subastas" className="btn-signal font-nav rounded-lg px-6 py-3 text-lg transition hover:brightness-105 active:translate-y-px">
+              <Link href="/subastas" className="btn-signal font-nav inline-flex items-center gap-2 rounded-lg px-6 py-3 text-lg transition hover:brightness-105 active:translate-y-px">
+                <IconGavel aria-hidden className="size-5 shrink-0" />
                 Ver subastas
               </Link>
-              <Link href="/registro" className="font-nav rounded-lg border border-white/30 bg-gradient-to-b from-white/10 to-white/0 px-6 py-3 text-lg text-white transition hover:border-white/50 hover:from-white/15">
+              <Link
+                href="/registro"
+                className="font-nav inline-flex items-center gap-2 rounded-lg border border-white/30 bg-gradient-to-b from-white/10 to-white/0 px-6 py-3 text-lg text-white transition hover:border-white/50 hover:from-white/15"
+              >
+                <IconUserPlus aria-hidden className="size-5 shrink-0" />
                 Crear cuenta para pujar
               </Link>
             </div>
@@ -72,7 +78,10 @@ async function FeaturedAuction() {
         </p>
       </div>
       <CountdownBoard startsAt={featured.startsAt.getTime()} endsAt={featured.endsAt.getTime()} serverNow={now.getTime()} />
-      <span className="self-start rounded-md bg-white px-4 py-2 text-sm font-semibold text-board group-hover:bg-zinc-100">Ver los lotes</span>
+      <span className="inline-flex items-center gap-1.5 self-start rounded-md bg-white px-4 py-2 text-sm font-semibold text-board group-hover:bg-zinc-100">
+        Ver los lotes
+        <IconChevronRight aria-hidden className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
+      </span>
     </Link>
   );
 }
@@ -121,10 +130,10 @@ function SectionHeading({ id, title, href }: { id: string; title: string; href: 
 }
 
 const STEPS = [
-  { title: "Crea tu cuenta", body: "Regístrate con tu nombre, correo y teléfono, y confirma tu correo." },
-  { title: "Validamos tus datos", body: "Nuestro equipo revisa cada registro. Te avisamos por correo cuando tu cuenta esté aprobada." },
-  { title: "Puja en vivo", body: "Mientras la subasta está abierta, ofrece al menos la puja mínima. Si alguien te supera, te avisamos." },
-  { title: "Gana el lote", body: "Al cierre, la puja más alta que alcance el precio de reserva gana. Te contactamos con los siguientes pasos." },
+  { icon: IconUserPlus, title: "Crea tu cuenta", body: "Regístrate con tu nombre, correo y teléfono, y confirma tu correo." },
+  { icon: IconShieldCheck, title: "Validamos tus datos", body: "Nuestro equipo revisa cada registro. Te avisamos por correo cuando tu cuenta esté aprobada." },
+  { icon: IconGavel, title: "Puja en vivo", body: "Mientras la subasta está abierta, ofrece al menos la puja mínima. Si alguien te supera, te avisamos." },
+  { icon: IconTrophy, title: "Gana el lote", body: "Al cierre, la puja más alta que alcance el precio de reserva gana. Te contactamos con los siguientes pasos." },
 ];
 
 function HowItWorks() {
@@ -136,8 +145,9 @@ function HowItWorks() {
       <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {STEPS.map((step, i) => (
           <li key={step.title} className="flex flex-col gap-2">
-            <span className="font-display flex size-10 items-center justify-center rounded-full bg-brand text-lg text-white dark:text-board" aria-hidden>
-              {i + 1}
+            <span className="relative mb-1 flex size-12 items-center justify-center rounded-xl bg-brand-soft text-brand" aria-hidden>
+              <step.icon className="size-6" />
+              <span className="font-display absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-signal text-xs text-board">{i + 1}</span>
             </span>
             <h3 className="text-lg font-semibold">{step.title}</h3>
             <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{step.body}</p>

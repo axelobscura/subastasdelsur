@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { IconDashboard, IconGavel, IconLaptop, IconMail, IconPackage, IconPhone, IconSignIn, IconSteps, IconTruck, IconUser, IconUserPlus, IconForklift } from "@/components/icons";
 import { ghostButtonClass, NavLink, pillClass, pillTrayClass, primaryButtonClass } from "@/components/nav-link";
 import { SiteLogo } from "@/components/site-logo";
 import { getCurrentUser } from "@/lib/dal";
@@ -18,9 +19,11 @@ export default function PublicLayout({ children }: LayoutProps<"/">) {
           </Link>
           <div className={`${pillTrayClass} order-last w-full md:order-none md:w-auto`}>
             <NavLink href="/subastas" match="/subastas" className={`${pillClass} flex-1 text-center md:flex-none`}>
+              <IconGavel aria-hidden className="size-4 shrink-0" />
               Subastas
             </NavLink>
             <NavLink href="/#como-funciona" className={`${pillClass} flex-1 text-center md:flex-none`}>
+              <IconSteps aria-hidden className="size-4 shrink-0" />
               Cómo funciona
             </NavLink>
           </div>
@@ -42,10 +45,12 @@ function GuestLinks() {
   return (
     <>
       <NavLink href="/entrar" match="/entrar" className={ghostButtonClass}>
+        <IconSignIn aria-hidden className="size-4 shrink-0" />
         <span className="sm:hidden">Entrar</span>
         <span className="hidden sm:inline">Iniciar sesión</span>
       </NavLink>
       <Link href="/registro" className={primaryButtonClass}>
+        <IconUserPlus aria-hidden className="hidden size-4 shrink-0 sm:block" />
         Registrarme
       </Link>
     </>
@@ -59,15 +64,24 @@ async function UserLinks() {
     <>
       {user.role === "admin" ? (
         <NavLink href="/admin" match="/admin" className={ghostButtonClass}>
+          <IconDashboard aria-hidden className="size-4 shrink-0" />
           Administración
         </NavLink>
       ) : null}
       <NavLink href="/mi-cuenta" match="/mi-cuenta" className={ghostButtonClass}>
+        <IconUser aria-hidden className="size-4 shrink-0" />
         Mi cuenta
       </NavLink>
     </>
   );
 }
+
+const CATEGORY_ICONS: Record<(typeof CATEGORIES)[number], typeof IconTruck> = {
+  Vehículos: IconTruck,
+  "Maquinaria y equipo": IconForklift,
+  "Equipo electrónico": IconLaptop,
+  "Materiales diversos": IconPackage,
+};
 
 function SiteFooter() {
   return (
@@ -83,21 +97,29 @@ function SiteFooter() {
         <div className="flex flex-col gap-3 text-sm">
           <h2 className="font-semibold text-white">Qué subastamos</h2>
           <ul className="flex flex-col gap-1.5 text-zinc-400">
-            {CATEGORIES.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
+            {CATEGORIES.map((c) => {
+              const Icon = CATEGORY_ICONS[c];
+              return (
+                <li key={c} className="flex items-center gap-2">
+                  <Icon aria-hidden className="size-4 shrink-0 text-zinc-500" />
+                  {c}
+                </li>
+              );
+            })}
           </ul>
         </div>
         <div className="flex flex-col gap-3 text-sm">
           <h2 className="font-semibold text-white">Contacto</h2>
           <ul className="flex flex-col gap-1.5">
             <li>
-              <a href={CONTACT.phoneHref} className="hover:text-white hover:underline">
+              <a href={CONTACT.phoneHref} className="inline-flex items-center gap-2 hover:text-white hover:underline">
+                <IconPhone aria-hidden className="size-4 shrink-0 text-zinc-500" />
                 {CONTACT.phone}
               </a>
             </li>
             <li>
-              <a href={`mailto:${CONTACT.email}`} className="hover:text-white hover:underline">
+              <a href={`mailto:${CONTACT.email}`} className="inline-flex items-center gap-2 hover:text-white hover:underline">
+                <IconMail aria-hidden className="size-4 shrink-0 text-zinc-500" />
                 {CONTACT.email}
               </a>
             </li>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { IconActivity, IconGavel, IconHome, IconSignOut, IconUsers } from "@/components/icons";
 import { ghostButtonClass, NavLink, pillClass, pillTrayClass } from "@/components/nav-link";
 import { SiteLogo } from "@/components/site-logo";
 import { Skeleton } from "@/components/ui";
@@ -21,21 +22,26 @@ export default function AdminLayout({ children }: LayoutProps<"/admin">) {
           </Link>
           <div className={`${pillTrayClass} order-last w-full sm:order-none sm:w-auto`}>
             <NavLink href="/admin/postores" match="/admin/postores" className={`${pillClass} flex-1 text-center sm:flex-none`}>
+              <IconUsers aria-hidden className="size-4 shrink-0" />
               Postores
             </NavLink>
             <NavLink href="/admin/subastas" match="/admin/subastas" className={`${pillClass} flex-1 text-center sm:flex-none`}>
+              <IconGavel aria-hidden className="size-4 shrink-0" />
               Subastas
             </NavLink>
             <NavLink href="/admin/actividad" match="/admin/actividad" className={`${pillClass} flex-1 text-center sm:flex-none`}>
+              <IconActivity aria-hidden className="size-4 shrink-0" />
               Actividad
             </NavLink>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Link href="/" className={ghostButtonClass}>
+              <IconHome aria-hidden className="size-4 shrink-0" />
               Ver sitio
             </Link>
             <form action={signOut}>
               <button type="submit" className={ghostButtonClass}>
+                <IconSignOut aria-hidden className="size-4 shrink-0" />
                 Cerrar sesión
               </button>
             </form>

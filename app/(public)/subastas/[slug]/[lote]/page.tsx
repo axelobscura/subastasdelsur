@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { AuctionTimes } from "@/components/auction-times";
 import { Gallery } from "@/components/gallery";
+import { IconArrowLeft, IconChevronLeft, IconChevronRight } from "@/components/icons";
 import { LiveLot, type Viewer } from "@/components/live-lot";
 import { LotTag, Notice, Skeleton } from "@/components/ui";
 import { getAuctionBySlug, getCatalogProduct, getNeighbourLots } from "@/lib/catalog";
@@ -59,18 +60,27 @@ async function LotView({ params }: { params: Props["params"] }) {
         </Notice>
       ) : null}
       <nav className="flex flex-wrap items-center justify-between gap-3 text-sm">
-        <Link href={`/subastas/${auction.slug}`} className="font-medium text-brand hover:underline">
-          ← {auction.title}
+        <Link href={`/subastas/${auction.slug}`} className="inline-flex items-center gap-1.5 font-medium text-brand hover:underline">
+          <IconArrowLeft aria-hidden className="size-4 shrink-0" />
+          {auction.title}
         </Link>
         <span className="flex gap-2">
           {neighbours.previous !== null ? (
-            <Link href={`/subastas/${auction.slug}/${neighbours.previous}`} className="rounded-md border border-line bg-surface px-3 py-1.5 font-medium hover:border-brand">
-              ← Lote {neighbours.previous}
+            <Link
+              href={`/subastas/${auction.slug}/${neighbours.previous}`}
+              className="inline-flex items-center gap-1 rounded-md border border-line bg-surface py-1.5 pr-3 pl-2 font-medium hover:border-brand"
+            >
+              <IconChevronLeft aria-hidden className="size-4 shrink-0" />
+              <span className="sr-only">Anterior: </span>Lote {neighbours.previous}
             </Link>
           ) : null}
           {neighbours.next !== null ? (
-            <Link href={`/subastas/${auction.slug}/${neighbours.next}`} className="rounded-md border border-line bg-surface px-3 py-1.5 font-medium hover:border-brand">
-              Lote {neighbours.next} →
+            <Link
+              href={`/subastas/${auction.slug}/${neighbours.next}`}
+              className="inline-flex items-center gap-1 rounded-md border border-line bg-surface py-1.5 pr-2 pl-3 font-medium hover:border-brand"
+            >
+              <span className="sr-only">Siguiente: </span>Lote {neighbours.next}
+              <IconChevronRight aria-hidden className="size-4 shrink-0" />
             </Link>
           ) : null}
         </span>

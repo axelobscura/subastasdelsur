@@ -7,6 +7,7 @@ import { NoPhoto } from "@/components/auction-card";
 import { AuctionTimes } from "@/components/auction-times";
 import { AuctionClock } from "@/components/clock";
 import { CountdownBoard } from "@/components/countdown-board";
+import { IconArrowLeft, IconGavel } from "@/components/icons";
 import { LotTag, Notice, Skeleton } from "@/components/ui";
 import { getAuctionLiveSummary } from "@/lib/bids-db";
 import { getCatalogProducts } from "@/lib/catalog";
@@ -54,8 +55,9 @@ async function AuctionView({ params }: { params: Props["params"] }) {
       {/* Phones: intro, countdown, times. Desktop: intro and times on the left, countdown on the right. */}
       <header className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-x-10">
         <div className="flex flex-col gap-4 lg:col-start-1 lg:row-start-1">
-          <Link href="/subastas" className="self-start text-sm font-medium text-brand hover:underline">
-            ← Todas las subastas
+          <Link href="/subastas" className="inline-flex items-center gap-1.5 self-start text-sm font-medium text-brand hover:underline">
+            <IconArrowLeft aria-hidden className="size-4 shrink-0" />
+            Todas las subastas
           </Link>
           <h1 className="font-display text-4xl leading-[1.02] sm:text-5xl">{auction.title}</h1>
           <AuctionClock startsAt={auction.startsAt.getTime()} endsAt={auction.endsAt.getTime()} serverNow={serverNow} status={auction.status} size="lg" showCountdown={false} />
@@ -120,7 +122,10 @@ function LotPrice({ startingPriceCents, currentPriceCents, bidCount }: { startin
         <span className="block text-xs text-zinc-500">{hasBids ? "Puja actual" : "Precio de salida"}</span>{" "}
         <span className="font-display block text-2xl leading-tight tabular-nums">{formatMoney(hasBids ? currentPriceCents! : startingPriceCents)}</span>
       </p>
-      <p className="pb-1 text-xs text-zinc-500">{bidCount === 0 ? "Sin pujas" : bidCount === 1 ? "1 puja" : `${bidCount} pujas`}</p>
+      <p className="inline-flex items-center gap-1 pb-1 text-xs text-zinc-500">
+        <IconGavel aria-hidden className="size-3.5 shrink-0" />
+        {bidCount === 0 ? "Sin pujas" : bidCount === 1 ? "1 puja" : `${bidCount} pujas`}
+      </p>
     </div>
   );
 }

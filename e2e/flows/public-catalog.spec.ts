@@ -82,7 +82,7 @@ test("visitors never see a draft; the admin previews it with correct times and c
   await expect(admin.getByTestId("lot-prices")).toContainText("$1,500.00");
   await expect(admin.getByTestId("lot-prices")).toContainText("$100.00");
   await expect(admin.getByRole("button", { name: /Ver foto 2 de 2/ })).toBeVisible();
-  await expect(admin.getByRole("link", { name: "Lote 2 →" })).toBeVisible();
+  await expect(admin.getByRole("link", { name: "Siguiente: Lote 2" })).toBeVisible();
   await expect(admin.getByText("Estás viendo la página como administrador.")).toBeVisible();
   await expect(admin).toHaveTitle(/Subastas del sur/); // drafts don't put their title in metadata
 

@@ -13,6 +13,7 @@ import type { LotState } from "@/lib/bids-db";
 import { centsToInput, formatMoney, parseMoneyToCents } from "@/lib/money";
 import { auctionPhase } from "@/lib/time";
 import { AuctionClockView, useServerNow } from "./clock";
+import { IconGavel, IconHistory } from "./icons";
 import { Notice } from "./ui";
 
 export type Viewer = "guest" | "admin" | "pending" | "rejected" | "approved";
@@ -200,8 +201,9 @@ function BidPanel({ state, phase, viewer, loginHref, onResult }: { state: LotSta
         <button
           type="submit"
           disabled={pending}
-          className="btn-signal rounded-lg px-6 py-2.5 text-lg font-bold transition hover:brightness-105 active:translate-y-px disabled:cursor-wait disabled:opacity-60"
+          className="btn-signal inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-lg font-bold transition hover:brightness-105 active:translate-y-px disabled:cursor-wait disabled:opacity-60"
         >
+          <IconGavel aria-hidden className="size-5 shrink-0" />
           {pending ? "Enviando…" : confirming !== null ? `Confirmar ${formatMoney(confirming)}` : "Pujar"}
         </button>
       </div>
@@ -234,7 +236,10 @@ function History({ state, auctionTimeZone }: { state: LotState; auctionTimeZone:
   const time = new Intl.DateTimeFormat("es-MX", { timeZone: auctionTimeZone, dateStyle: "short", timeStyle: "medium", hourCycle: "h23" });
   return (
     <div className="flex flex-col gap-2">
-      <h2 className="font-semibold">Historial de pujas</h2>
+      <h2 className="flex items-center gap-2 font-semibold">
+        <IconHistory aria-hidden className="size-4 shrink-0 text-brand" />
+        Historial de pujas
+      </h2>
       <ol className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface text-sm" data-testid="bid-history">
         {state.history.map((h, i) => (
           <li key={`${h.amountCents}-${h.at}`} className={`flex items-center justify-between gap-3 px-4 py-2.5 ${i === 0 ? "bg-brand-soft font-semibold" : ""}`}>

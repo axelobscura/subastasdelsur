@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { AuctionClock } from "@/components/clock";
+import { IconCalendarEnd, IconCalendarStart, IconPackage } from "@/components/icons";
 import type { CatalogAuction } from "@/lib/catalog";
 import { mediaUrl } from "@/lib/storage";
 import { formatAuctionTimeShort } from "@/lib/time";
@@ -15,7 +16,8 @@ export function AuctionCard({ auction, serverNow }: { auction: CatalogAuction; s
           ) : (
             <NoPhoto />
           )}
-          <span className="absolute right-3 bottom-3 rounded-md bg-board/85 px-2 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+          <span className="absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-md bg-board/85 px-2 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+            <IconPackage aria-hidden className="size-3.5 shrink-0" />
             {auction.productCount} {auction.productCount === 1 ? "lote" : "lotes"}
           </span>
         </div>
@@ -24,11 +26,17 @@ export function AuctionCard({ auction, serverNow }: { auction: CatalogAuction; s
           <AuctionClock startsAt={auction.startsAt.getTime()} endsAt={auction.endsAt.getTime()} serverNow={serverNow} status={auction.status} />
           <dl className="mt-auto grid grid-cols-2 gap-2 border-t border-line pt-3 text-xs">
             <div>
-              <dt className="text-zinc-500">Abre</dt>
+              <dt className="flex items-center gap-1 text-zinc-500">
+                <IconCalendarStart aria-hidden className="size-3.5 shrink-0" />
+                Abre
+              </dt>
               <dd className="font-medium text-zinc-800 dark:text-zinc-200">{formatAuctionTimeShort(auction.startsAt, auction.timezone)}</dd>
             </div>
             <div>
-              <dt className="text-zinc-500">Cierra</dt>
+              <dt className="flex items-center gap-1 text-zinc-500">
+                <IconCalendarEnd aria-hidden className="size-3.5 shrink-0" />
+                Cierra
+              </dt>
               <dd className="font-medium text-zinc-800 dark:text-zinc-200">{formatAuctionTimeShort(auction.endsAt, auction.timezone)}</dd>
             </div>
           </dl>

@@ -7,6 +7,7 @@
  */
 import { auctionPhase, formatCountdown } from "@/lib/time";
 import { LiveDot, useServerNow } from "./clock";
+import { IconTimer } from "./icons";
 
 type Props = {
   startsAt: number;
@@ -45,7 +46,7 @@ export function CountdownBoard({ startsAt, endsAt, serverNow, status = "publishe
   return (
     <div className="flex flex-col gap-3">
       <p className="flex items-center gap-2 text-sm font-medium text-zinc-300">
-        {phase === "live" && status === "published" ? <LiveDot /> : null}
+        {phase === "live" && status === "published" ? <LiveDot /> : <IconTimer aria-hidden className="size-4 shrink-0 text-signal" />}
         {phase === "live" && status === "published" ? "En vivo, cierra en" : label}
       </p>
       {/* The same time as text, for screen readers (and tests) */}

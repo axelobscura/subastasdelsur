@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { IconDanger, IconInfo, IconSuccess, IconWarning } from "./icons";
 
 export function PageCard({ title, children, footer }: { title: string; children: ReactNode; footer?: ReactNode }) {
   return (
@@ -19,10 +20,15 @@ export function Notice({ tone = "info", title, children }: { tone?: "info" | "su
     warning: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100",
     danger: "border-red-200 bg-red-50 text-red-950 dark:border-red-900 dark:bg-red-950 dark:text-red-100",
   }[tone];
+  const Icon = { info: IconInfo, success: IconSuccess, warning: IconWarning, danger: IconDanger }[tone];
+  const iconColor = { info: "text-brand", success: "text-emerald-600 dark:text-emerald-300", warning: "text-amber-600 dark:text-amber-300", danger: "text-red-600 dark:text-red-300" }[tone];
   return (
-    <div role={tone === "danger" ? "alert" : "status"} className={`rounded-xl border p-4 text-sm leading-relaxed ${styles}`}>
-      {title ? <p className="mb-1 font-semibold">{title}</p> : null}
-      {children}
+    <div role={tone === "danger" ? "alert" : "status"} className={`flex gap-3 rounded-xl border p-4 text-sm leading-relaxed ${styles}`}>
+      <Icon aria-hidden className={`mt-0.5 size-5 shrink-0 ${iconColor}`} />
+      <div className="min-w-0 flex-1">
+        {title ? <p className="mb-1 font-semibold">{title}</p> : null}
+        {children}
+      </div>
     </div>
   );
 }

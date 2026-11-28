@@ -1,4 +1,5 @@
 import { LocalTime } from "@/components/clock";
+import { IconCalendarEnd, IconCalendarStart } from "@/components/icons";
 import type { CatalogAuction } from "@/lib/catalog";
 import { formatAuctionTime } from "@/lib/time";
 import { timeZoneLabel } from "@/lib/timezones";
@@ -12,7 +13,10 @@ export function AuctionTimes({ auction }: { auction: CatalogAuction }) {
     >
       <dl className="grid gap-3 sm:grid-cols-2">
         <div>
-          <dt className="text-xs font-semibold text-zinc-500">Inicio</dt>
+          <dt className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
+            <IconCalendarStart aria-hidden className="size-4 shrink-0 text-brand" />
+            Inicio
+          </dt>
           <dd className="mt-0.5 font-medium first-letter:uppercase">
             {formatAuctionTime(auction.startsAt, auction.timezone)}
             <LocalTime
@@ -22,7 +26,10 @@ export function AuctionTimes({ auction }: { auction: CatalogAuction }) {
           </dd>
         </div>
         <div>
-          <dt className="text-xs font-semibold text-zinc-500">Cierre</dt>
+          <dt className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
+            <IconCalendarEnd aria-hidden className="size-4 shrink-0 text-brand" />
+            Cierre
+          </dt>
           <dd className="mt-0.5 font-medium first-letter:uppercase">
             {formatAuctionTime(auction.endsAt, auction.timezone)}
             <LocalTime
