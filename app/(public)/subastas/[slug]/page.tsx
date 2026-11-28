@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { NoPhoto } from "@/components/auction-card";
 import { AuctionTimes } from "@/components/auction-times";
 import { AuctionClock } from "@/components/clock";
+import { CountdownBoard } from "@/components/countdown-board";
 import { LotTag, Notice, Skeleton } from "@/components/ui";
 import { getAuctionLiveSummary } from "@/lib/bids-db";
 import { getCatalogProducts } from "@/lib/catalog";
@@ -14,6 +15,7 @@ import { getDb } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
 import { requestTime } from "@/lib/request-time";
 import { mediaUrl } from "@/lib/storage";
+import { formatAuctionTimeShort } from "@/lib/time";
 
 type Props = PageProps<"/subastas/[slug]">;
 
@@ -49,16 +51,25 @@ async function AuctionView({ params }: { params: Props["params"] }) {
       ) : null}
       {auction.status === "cancelled" ? <Notice tone="danger" title="Subasta cancelada">Esta subasta fue cancelada y no recibirá pujas.</Notice> : null}
 
-      <header className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:items-end">
-        <div className="flex flex-col gap-3">
+      {/* Phones: intro, countdown, times. Desktop: intro and times on the left, countdown on the right. */}
+      <header className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-x-10">
+        <div className="flex flex-col gap-4 lg:col-start-1 lg:row-start-1">
           <Link href="/subastas" className="self-start text-sm font-medium text-brand hover:underline">
             ← Todas las subastas
           </Link>
           <h1 className="font-display text-4xl leading-[1.02] sm:text-5xl">{auction.title}</h1>
-          <AuctionClock startsAt={auction.startsAt.getTime()} endsAt={auction.endsAt.getTime()} serverNow={serverNow} status={auction.status} size="lg" />
+          <AuctionClock startsAt={auction.startsAt.getTime()} endsAt={auction.endsAt.getTime()} serverNow={serverNow} status={auction.status} size="lg" showCountdown={false} />
           {auction.description ? <p className="max-w-2xl whitespace-pre-line leading-relaxed text-zinc-700 dark:text-zinc-300">{auction.description}</p> : null}
         </div>
-        <AuctionTimes auction={auction} />
+        <div className="flex flex-col gap-5 self-start rounded-2xl bg-board p-5 text-white sm:p-7 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+          <CountdownBoard startsAt={auction.startsAt.getTime()} endsAt={auction.endsAt.getTime()} serverNow={serverNow} status={auction.status} size="lg" />
+          <p className="border-t border-board-line pt-4 text-sm text-zinc-300">
+            {products.length} {products.length === 1 ? "lote" : "lotes"}. Cierra el {formatAuctionTimeShort(auction.endsAt, auction.timezone)}
+          </p>
+        </div>
+        <div className="lg:col-start-1 lg:row-start-2">
+          <AuctionTimes auction={auction} />
+        </div>
       </header>
 
       <section aria-labelledby="lotes" className="flex flex-col gap-4">

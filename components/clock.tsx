@@ -44,6 +44,8 @@ type ClockProps = {
   serverNow: number;
   status: "draft" | "published" | "cancelled";
   size?: "sm" | "lg";
+  /** false: only the phase badge (the page shows the countdown elsewhere, e.g. CountdownBoard). */
+  showCountdown?: boolean;
 };
 
 const BADGE = {
@@ -70,11 +72,11 @@ export function AuctionClock({ serverNow, ...props }: ClockProps) {
 }
 
 /** The same, for a component that already tracks the server time itself. */
-export function AuctionClockView({ startsAt, endsAt, now, status, size = "sm" }: Omit<ClockProps, "serverNow"> & { now: number }) {
+export function AuctionClockView({ startsAt, endsAt, now, status, size = "sm", showCountdown = true }: Omit<ClockProps, "serverNow"> & { now: number }) {
   const phase = auctionPhase(new Date(startsAt), new Date(endsAt), new Date(now));
   const badge = status === "published" ? BADGE[phase] : BADGE[status];
   const text =
-    status === "cancelled"
+    status === "cancelled" || !showCountdown
       ? null
       : phase === "upcoming"
         ? `Empieza en ${formatCountdown(startsAt - now)}`
