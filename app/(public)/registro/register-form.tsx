@@ -14,19 +14,23 @@ export function RegisterForm() {
     <form action={action} className="flex flex-col gap-4" noValidate>
       <FormMessage state={state} />
       <Field label="Nombre completo" name="name" autoComplete="name" required defaultValue={state.values?.name} errors={errors.name} />
-      <Field label="Correo electrónico" name="email" type="email" autoComplete="email" required defaultValue={state.values?.email} errors={errors.email} />
-      <Field label="Teléfono" name="phone" type="tel" autoComplete="tel" required defaultValue={state.values?.phone} errors={errors.phone} hint="10 dígitos, o con lada internacional (+52…)." />
-      <Field label="Contraseña" name="password" type="password" autoComplete="new-password" required minLength={10} errors={errors.password} hint="Mínimo 10 caracteres." />
-      <Field label="Confirma tu contraseña" name="passwordConfirm" type="password" autoComplete="new-password" required errors={errors.passwordConfirm} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Correo electrónico" name="email" type="email" autoComplete="email" required defaultValue={state.values?.email} errors={errors.email} />
+        <Field label="Teléfono" name="phone" type="tel" autoComplete="tel" required defaultValue={state.values?.phone} errors={errors.phone} hint="10 dígitos, o con lada (+52…)." />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Contraseña" name="password" type="password" autoComplete="new-password" required minLength={10} errors={errors.password} hint="Mínimo 10 caracteres." />
+        <Field label="Confirma tu contraseña" name="passwordConfirm" type="password" autoComplete="new-password" required errors={errors.passwordConfirm} />
+      </div>
       <div className="flex flex-col gap-1">
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" name="terms" className="mt-1" aria-invalid={errors.terms ? true : undefined} />
+        <label className="flex items-start gap-2.5 rounded-lg border border-line bg-zinc-50 p-3 text-sm dark:bg-zinc-900">
+          <input type="checkbox" name="terms" className="mt-0.5 size-4 shrink-0 accent-brand" aria-invalid={errors.terms ? true : undefined} />
           <span>Acepto los términos y condiciones y el aviso de privacidad.</span>
         </label>
         {errors.terms ? <p className="text-sm text-red-700 dark:text-red-400">{errors.terms[0]}</p> : null}
       </div>
       <SubmitButton pendingText="Creando cuenta…">Crear cuenta</SubmitButton>
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
         Después de confirmar tu correo, nuestro equipo validará tu acceso antes de que puedas pujar.
       </p>
     </form>

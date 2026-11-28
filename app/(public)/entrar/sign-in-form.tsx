@@ -21,7 +21,7 @@ export function SignInForm() {
       <Field label="Correo electrónico" name="email" type="email" autoComplete="email" required defaultValue={state.values?.email} errors={errors.email} />
       <Field label="Contraseña" name="password" type="password" autoComplete="current-password" required errors={errors.password} />
       <SubmitButton pendingText="Entrando…">Iniciar sesión</SubmitButton>
-      <Link href="/recuperar" className="text-sm underline">
+      <Link href="/recuperar" className="self-center text-sm font-medium text-brand hover:underline">
         ¿Olvidaste tu contraseña?
       </Link>
     </form>
