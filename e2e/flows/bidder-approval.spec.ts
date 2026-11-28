@@ -10,7 +10,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { eq } from "drizzle-orm";
-import { deleteTrackedSessions, testRunId, trackSession } from "./helpers";
+import { deleteAuditRows, deleteTrackedSessions, testRunId, trackSession } from "./helpers";
 
 const emailFile = process.env.EMAIL_DRY_RUN_FILE;
 test.skip(process.env.ALLOW_DB_TESTS !== "1" || !emailFile, "opt-in: ALLOW_DB_TESTS=1 and EMAIL_DRY_RUN_FILE");
@@ -49,6 +49,7 @@ test.afterAll(async () => {
   const pool = createPool();
   await createDb(pool).delete(user).where(eq(user.email, bidderEmail)); // cascades sessions/accounts
   await pool.end();
+  await deleteAuditRows(bidderEmail);
   await deleteTrackedSessions();
 });
 
@@ -100,7 +101,7 @@ test("a bidder registers, confirms the email, and the admin approves them", asyn
   // matters is that only the 404 page renders, with no admin nav or data)
   await bidder.goto("/admin/postores");
   await expect(bidder.getByRole("heading", { name: "Página no encontrada" })).toBeVisible();
-  await expect(bidder.getByText("Subastas del sur · Admin")).toHaveCount(0);
+  await expect(bidder.getByRole("navigation", { name: "Administración" })).toHaveCount(0);
   await expect(bidder.getByText(bidderEmail)).toHaveCount(0);
 
   // 7. The admin approves the bidder

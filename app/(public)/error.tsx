@@ -18,7 +18,7 @@ export default function PublicError({ error, retry }: { error: unknown; retry: (
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-4 py-16 text-center">
-      <h1 className="text-2xl font-semibold tracking-tight">No pudimos cargar esta página</h1>
+      <h1 className="font-display text-4xl">No pudimos cargar esta página</h1>
       <p className="text-zinc-600 dark:text-zinc-400">Ocurrió un problema temporal. Inténtalo de nuevo en unos segundos.</p>
       <div className="flex gap-3">
         <button type="button" onClick={() => retry()} className="rounded-md bg-zinc-900 px-4 py-2 font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900">

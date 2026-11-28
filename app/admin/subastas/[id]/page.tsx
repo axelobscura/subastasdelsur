@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Notice, Skeleton } from "@/components/ui";
+import { AuditList } from "@/components/audit-list";
 import { getAuctionForAdmin } from "@/lib/admin/auctions";
+import { auctionAuditLog } from "@/lib/admin/audit";
 import { DISPLAY_STATE_LABELS, displayState, permissions, publishProblems } from "@/lib/auctions/rules";
 import { formatAuctionTime, instantToWallClock } from "@/lib/time";
 import { timeZoneLabel } from "@/lib/timezones";
@@ -120,6 +122,19 @@ async function AuctionAdmin({
           }}
         />
       </section>
+
+      <section aria-labelledby="historial" className="flex flex-col gap-3">
+        <h2 id="historial" className="text-lg font-medium">
+          Historial
+        </h2>
+        <Suspense fallback={<Skeleton className="h-24" />}>
+          <AuctionHistory auctionId={auction.id} />
+        </Suspense>
+      </section>
     </>
   );
+}
+
+async function AuctionHistory({ auctionId }: { auctionId: string }) {
+  return <AuditList entries={await auctionAuditLog(auctionId)} />;
 }

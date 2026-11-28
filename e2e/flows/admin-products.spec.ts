@@ -9,7 +9,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { like } from "drizzle-orm";
 import sharp from "sharp";
-import { adminPage, createDraft, deleteTrackedSessions, flowsEnabled, signOut, testRunId, withDb } from "./helpers";
+import { adminPage, createDraft, deleteAuditRows, deleteTrackedSessions, flowsEnabled, signOut, testRunId, withDb } from "./helpers";
 
 test.skip(!flowsEnabled || !process.env.UPLOAD_DIR, "opt-in: ALLOW_DB_TESTS=1, EMAIL_DRY_RUN_FILE and UPLOAD_DIR");
 test.describe.configure({ mode: "serial" });
@@ -28,6 +28,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   const { auction } = await import("../../lib/db/schema");
   await withDb((db) => db.delete(auction).where(like(auction.title, `${titlePrefix}%`)));
+  await deleteAuditRows(titlePrefix.replace("[TEST] ", ""));
   await deleteTrackedSessions();
   await rm(fixtures, { recursive: true, force: true });
 });

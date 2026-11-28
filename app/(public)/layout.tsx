@@ -1,21 +1,30 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { ghostButtonClass, NavLink, pillClass, pillTrayClass, primaryButtonClass } from "@/components/nav-link";
+import { SiteLogo } from "@/components/site-logo";
 import { getCurrentUser } from "@/lib/dal";
+import { CATEGORIES, CONTACT } from "@/lib/site";
 import { DEFAULT_AUCTION_TIMEZONE } from "@/lib/time";
 import { timeZoneLabel } from "@/lib/timezones";
 
 export default function PublicLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex flex-1 flex-col">
-      <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-        <nav className="mx-auto flex w-full max-w-6xl items-center gap-6 px-4 py-3 text-sm">
-          <Link href="/" className="text-base font-semibold tracking-tight">
-            Subastas del sur
+      <header className="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
+        {/* Phones: logo and account buttons on one row, the section pills on a second row. */}
+        <nav className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-2 gap-y-2.5 px-4 py-2.5 md:flex-nowrap md:gap-x-3 md:py-3">
+          <Link href="/" aria-label="Subastas del Sur, inicio" className="shrink-0 rounded-md md:mr-3">
+            <SiteLogo className="h-10 w-auto sm:h-13 lg:h-14" />
           </Link>
-          <Link href="/subastas" className="hover:underline">
-            Subastas
-          </Link>
-          <div className="ml-auto flex items-center gap-4">
+          <div className={`${pillTrayClass} order-last w-full md:order-none md:w-auto`}>
+            <NavLink href="/subastas" match="/subastas" className={`${pillClass} flex-1 text-center md:flex-none`}>
+              Subastas
+            </NavLink>
+            <NavLink href="/#como-funciona" className={`${pillClass} flex-1 text-center md:flex-none`}>
+              Cómo funciona
+            </NavLink>
+          </div>
+          <div className="ml-auto flex items-center gap-2 sm:gap-2.5">
             {/* Reads the session, so it streams in; the rest of the header is static */}
             <Suspense fallback={<GuestLinks />}>
               <UserLinks />
@@ -24,12 +33,7 @@ export default function PublicLayout({ children }: LayoutProps<"/">) {
         </nav>
       </header>
       <div className="flex flex-1 flex-col">{children}</div>
-      <footer className="border-t border-zinc-200 py-6 text-center text-xs text-zinc-500 dark:border-zinc-800">
-        <p>
-          Los horarios se muestran en la hora de cada subasta (normalmente {timeZoneLabel(DEFAULT_AUCTION_TIMEZONE)}) y en tu hora local. Todas las subastas
-          empiezan y terminan en el mismo instante para todos los postores.
-        </p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
@@ -37,10 +41,11 @@ export default function PublicLayout({ children }: LayoutProps<"/">) {
 function GuestLinks() {
   return (
     <>
-      <Link href="/entrar" className="hover:underline">
-        Iniciar sesión
-      </Link>
-      <Link href="/registro" className="rounded-md bg-zinc-900 px-3 py-1.5 font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900">
+      <NavLink href="/entrar" match="/entrar" className={ghostButtonClass}>
+        <span className="sm:hidden">Entrar</span>
+        <span className="hidden sm:inline">Iniciar sesión</span>
+      </NavLink>
+      <Link href="/registro" className={primaryButtonClass}>
         Registrarme
       </Link>
     </>
@@ -53,13 +58,58 @@ async function UserLinks() {
   return (
     <>
       {user.role === "admin" ? (
-        <Link href="/admin" className="hover:underline">
+        <NavLink href="/admin" match="/admin" className={ghostButtonClass}>
           Administración
-        </Link>
+        </NavLink>
       ) : null}
-      <Link href="/mi-cuenta" className="hover:underline">
+      <NavLink href="/mi-cuenta" match="/mi-cuenta" className={ghostButtonClass}>
         Mi cuenta
-      </Link>
+      </NavLink>
     </>
+  );
+}
+
+function SiteFooter() {
+  return (
+    <footer className="mt-16 bg-board text-zinc-300">
+      <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr]">
+        <div className="flex flex-col gap-4">
+          <SiteLogo tone="dark" className="h-12 w-auto self-start" />
+          <p className="max-w-sm text-sm leading-relaxed text-zinc-400">
+            Los horarios se muestran en la hora de cada subasta, normalmente {timeZoneLabel(DEFAULT_AUCTION_TIMEZONE)}, y en tu hora local. Todas las subastas empiezan y terminan en el mismo
+            instante para todos los postores.
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 text-sm">
+          <h2 className="font-semibold text-white">Qué subastamos</h2>
+          <ul className="flex flex-col gap-1.5 text-zinc-400">
+            {CATEGORIES.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+        </div>
+        <div className="flex flex-col gap-3 text-sm">
+          <h2 className="font-semibold text-white">Contacto</h2>
+          <ul className="flex flex-col gap-1.5">
+            <li>
+              <a href={CONTACT.phoneHref} className="hover:text-white hover:underline">
+                {CONTACT.phone}
+              </a>
+            </li>
+            <li>
+              <a href={`mailto:${CONTACT.email}`} className="hover:text-white hover:underline">
+                {CONTACT.email}
+              </a>
+            </li>
+          </ul>
+          <Link href="/registro" className="mt-2 self-start font-medium text-signal hover:underline">
+            Crear cuenta para pujar
+          </Link>
+        </div>
+      </div>
+      <div className="border-t border-board-line">
+        <p className="mx-auto w-full max-w-6xl px-4 py-5 text-xs text-zinc-400">Subastas del Sur. Subastas en línea en México.</p>
+      </div>
+    </footer>
   );
 }

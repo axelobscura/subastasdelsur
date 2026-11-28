@@ -47,12 +47,22 @@ type ClockProps = {
 };
 
 const BADGE = {
-  upcoming: { label: "Próxima", className: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" },
-  live: { label: "En vivo", className: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200" },
-  ended: { label: "Finalizada", className: "bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100" },
+  upcoming: { label: "Próxima", className: "bg-brand-soft text-brand-strong" },
+  live: { label: "En vivo", className: "bg-red-50 text-red-800 ring-1 ring-red-200 dark:bg-red-950 dark:text-red-100 dark:ring-red-900" },
+  ended: { label: "Finalizada", className: "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200" },
   cancelled: { label: "Cancelada", className: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200" },
   draft: { label: "Borrador", className: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
 } as const;
+
+/** The pulsing red dot of an auction that is open right now. */
+export function LiveDot() {
+  return (
+    <span className="relative flex size-2" aria-hidden>
+      <span className="absolute inline-flex size-full rounded-full bg-live opacity-70 motion-safe:animate-ping" />
+      <span className="relative inline-flex size-2 rounded-full bg-live" />
+    </span>
+  );
+}
 
 /** Phase badge plus countdown ("Empieza en…" / "Termina en…"), from the server clock. */
 export function AuctionClock({ serverNow, ...props }: ClockProps) {
@@ -74,9 +84,12 @@ export function AuctionClockView({ startsAt, endsAt, now, status, size = "sm" }:
 
   return (
     <div className={`flex flex-wrap items-center gap-2 ${size === "lg" ? "text-base" : "text-sm"}`} data-testid="auction-clock" data-phase={status === "published" ? phase : status}>
-      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}>{badge.label}</span>
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge.className}`}>
+        {status === "published" && phase === "live" ? <LiveDot /> : null}
+        {badge.label}
+      </span>
       {text ? (
-        <span className="tabular-nums text-zinc-700 dark:text-zinc-300" data-testid="countdown">
+        <span className={`tabular-nums text-zinc-700 dark:text-zinc-300 ${size === "lg" ? "font-medium" : ""}`} data-testid="countdown">
           {text}
         </span>
       ) : null}
@@ -89,7 +102,7 @@ export function LocalTime({ instant, auctionTimeZone }: { instant: number; aucti
   const zone = useBrowserTimeZone();
   if (!zone || zone === auctionTimeZone) return null;
   return (
-    <span className="block text-sm text-zinc-500" data-testid="local-time">
+    <span className="block text-sm font-normal text-zinc-500" data-testid="local-time">
       En tu hora local ({zone}): {formatAuctionTime(new Date(instant), zone)}
     </span>
   );

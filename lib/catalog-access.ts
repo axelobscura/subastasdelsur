@@ -1,6 +1,7 @@
 import "server-only";
 import { type CatalogAuction, getAuctionBySlug } from "./catalog";
 import { getCurrentUser } from "./dal";
+import { formatAuctionTime } from "./time";
 
 /**
  * The auction a visitor may see at /subastas/<slug>: published and cancelled ones for everyone,
@@ -14,8 +15,14 @@ export async function getVisibleAuction(slug: string): Promise<{ auction: Catalo
   return user?.role === "admin" ? { auction, preview: true } : null;
 }
 
-/** For generateMetadata: never reveal a draft's title. */
-export async function getPublicAuctionTitle(slug: string): Promise<string | null> {
+/** Title and description for generateMetadata (never for drafts). */
+export async function getPublicAuctionMeta(slug: string): Promise<{ title: string; description: string } | null> {
   const auction = await getAuctionBySlug(slug);
-  return auction && auction.status !== "draft" ? auction.title : null;
+  if (!auction || auction.status === "draft") return null;
+  const when = `${formatAuctionTime(auction.startsAt, auction.timezone)} a ${formatAuctionTime(auction.endsAt, auction.timezone)}`;
+  const intro = auction.description.trim().replace(/\s+/g, " ").slice(0, 150);
+  return {
+    title: auction.title,
+    description: `${intro ? `${intro} · ` : ""}Subasta en línea, ${auction.productCount} ${auction.productCount === 1 ? "lote" : "lotes"}. ${when}.`.slice(0, 300),
+  };
 }

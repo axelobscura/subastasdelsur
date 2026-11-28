@@ -271,3 +271,32 @@ export type Product = typeof product.$inferSelect;
 export type NewProduct = typeof product.$inferInsert;
 export type ProductImage = typeof productImage.$inferSelect;
 export type NewProductImage = typeof productImage.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Audit log of admin actions (phase 7)
+// ---------------------------------------------------------------------------
+
+export const auditEntity = ["auction", "product", "product_image", "user"] as const;
+export type AuditEntity = (typeof auditEntity)[number];
+
+export const auditLog = mysqlTable(
+  "audit_log",
+  {
+    id: id(),
+    /** The admin who did it (kept as text too, so the log survives if the user is removed). */
+    actorId: varchar("actor_id", { length: 36 }).references(() => user.id, { onDelete: "set null" }),
+    actorName: varchar("actor_name", { length: 255 }).notNull(),
+    /** e.g. "auction.publish", "product.update", "bidder.approve". */
+    action: varchar("action", { length: 64 }).notNull(),
+    entityType: mysqlEnum("entity_type", auditEntity).notNull(),
+    entityId: varchar("entity_id", { length: 36 }).notNull(),
+    /** Human-readable label at the time (auction or lot title, bidder name). */
+    entityLabel: varchar("entity_label", { length: 300 }).notNull(),
+    /** Small JSON with what changed (never secrets or passwords). */
+    details: text("details"),
+    createdAt: utcDatetime("created_at").notNull(),
+  },
+  (t) => [index("audit_log_created_idx").on(t.createdAt), index("audit_log_entity_idx").on(t.entityType, t.entityId, t.createdAt)],
+);
+
+export type AuditLogEntry = typeof auditLog.$inferSelect;

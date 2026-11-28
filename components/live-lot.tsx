@@ -65,32 +65,35 @@ export function LiveLot({ initial, viewer, loginHref, auctionTimeZone }: Props) 
     <section aria-label="Pujas" className="flex flex-col gap-4" data-testid="live-lot">
       <AuctionClockView startsAt={state.startsAt} endsAt={state.endsAt} now={now} status={status} size="lg" />
 
-      <dl className="grid grid-cols-2 gap-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800" data-testid="lot-prices" aria-live="polite">
-        <div>
-          <dt className="text-sm text-zinc-500">{hasBids ? (phase === "ended" ? "Puja final" : "Puja actual") : "Precio de salida"}</dt>
-          <dd className="text-2xl font-semibold tabular-nums" data-testid="current-price">
+      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-board-line text-white" data-testid="lot-prices" aria-live="polite">
+        <div className="col-span-2 bg-board p-5 sm:p-6">
+          <dt className="text-sm text-zinc-300">{hasBids ? (phase === "ended" ? "Puja final" : "Puja actual") : "Precio de salida"}</dt>
+          <dd className="font-display mt-1 text-5xl leading-none text-signal tabular-nums sm:text-6xl" data-testid="current-price">
             {formatMoney(hasBids ? state.currentPriceCents! : state.startingPriceCents)}
           </dd>
-          <dd className="text-sm text-zinc-500" data-testid="bid-count">
+          <dd className="mt-2 text-sm text-zinc-300" data-testid="bid-count">
             {state.bidCount === 0 ? "Sin pujas" : state.bidCount === 1 ? "1 puja" : `${state.bidCount} pujas`}
           </dd>
         </div>
-        <div>
-          <dt className="text-sm text-zinc-500">{phase === "ended" ? "Incremento mínimo" : "Puja mínima"}</dt>
-          <dd className="text-2xl font-semibold tabular-nums" data-testid="minimum-bid">
+        <div className={`bg-board p-4 sm:px-6 ${state.reserve === "none" ? "col-span-2" : ""}`}>
+          <dt className="text-sm text-zinc-300">{phase === "ended" ? "Incremento mínimo" : "Puja mínima"}</dt>
+          <dd className="font-display mt-1 text-2xl tabular-nums" data-testid="minimum-bid">
             {formatMoney(phase === "ended" ? state.minIncrementCents : state.minimumNextCents)}
           </dd>
-          {phase !== "ended" ? <dd className="text-sm text-zinc-500">Incremento mínimo {formatMoney(state.minIncrementCents)}</dd> : null}
-          {state.reserve !== "none" ? (
-            <dd className="text-sm text-zinc-500" data-testid="reserve">
+          {phase !== "ended" ? <dd className="text-xs text-zinc-400">Incremento mínimo {formatMoney(state.minIncrementCents)}</dd> : null}
+        </div>
+        {state.reserve !== "none" ? (
+          <div className="bg-board p-4 sm:px-6">
+            <dt className="text-sm text-zinc-300">Reserva</dt>
+            <dd className="mt-1 text-sm font-semibold" data-testid="reserve">
               {state.reserve === "met" ? "Precio de reserva alcanzado" : "Precio de reserva no alcanzado"}
             </dd>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </dl>
 
       {phase === "ended" && status === "published" ? (
-        <p className="text-sm font-medium" data-testid="lot-outcome">
+        <p className="font-display text-2xl" data-testid="lot-outcome">
           {!hasBids ? "Sin pujas: este lote no se vendió." : state.reserve === "not_met" ? "No se vendió: no se alcanzó el precio de reserva." : `Vendido por ${formatMoney(state.currentPriceCents!)}.`}
         </p>
       ) : null}
@@ -169,7 +172,7 @@ function BidPanel({ state, phase, viewer, loginHref, onResult }: { state: LotSta
 
   return (
     <form
-      className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
+      className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 sm:p-5"
       onSubmit={(e) => {
         e.preventDefault();
         if (cents === null) return setFeedback({ ok: false, message: "Escribe una cantidad válida, por ejemplo 1500 o 1,500.50.", state: null });
@@ -178,7 +181,7 @@ function BidPanel({ state, phase, viewer, loginHref, onResult }: { state: LotSta
         submit(cents);
       }}
     >
-      <label htmlFor="bid-amount" className="text-sm font-medium">
+      <label htmlFor="bid-amount" className="text-sm font-semibold">
         Tu puja (mínimo {formatMoney(state.minimumNextCents)})
       </label>
       <div className="flex gap-2">
@@ -192,12 +195,12 @@ function BidPanel({ state, phase, viewer, loginHref, onResult }: { state: LotSta
             setAmount(e.target.value);
             setConfirming(null);
           }}
-          className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-lg tabular-nums dark:border-zinc-700 dark:bg-zinc-900"
+          className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-surface px-3 py-2.5 text-xl font-semibold tabular-nums outline-none focus:border-brand focus:ring-3 focus:ring-brand/15 dark:border-zinc-700 dark:bg-zinc-900"
         />
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-zinc-900 px-5 py-2 font-semibold text-white hover:bg-zinc-700 disabled:cursor-wait disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
+          className="btn-signal rounded-lg px-6 py-2.5 text-lg font-bold transition hover:brightness-105 active:translate-y-px disabled:cursor-wait disabled:opacity-60"
         >
           {pending ? "Enviando…" : confirming !== null ? `Confirmar ${formatMoney(confirming)}` : "Pujar"}
         </button>
@@ -206,7 +209,7 @@ function BidPanel({ state, phase, viewer, loginHref, onResult }: { state: LotSta
         {[1, 2, 5].map((n) => {
           const value = state.minimumNextCents + (n - 1) * state.minIncrementCents;
           return (
-            <button key={n} type="button" onClick={() => setAmount(centsToInput(value))} className="rounded-full border border-zinc-300 px-3 py-1 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+            <button key={n} type="button" onClick={() => setAmount(centsToInput(value))} className="rounded-full border border-zinc-300 px-3 py-1 font-medium tabular-nums hover:border-brand hover:text-brand dark:border-zinc-700">
               {formatMoney(value)}
             </button>
           );
@@ -231,10 +234,10 @@ function History({ state, auctionTimeZone }: { state: LotState; auctionTimeZone:
   const time = new Intl.DateTimeFormat("es-MX", { timeZone: auctionTimeZone, dateStyle: "short", timeStyle: "medium", hourCycle: "h23" });
   return (
     <div className="flex flex-col gap-2">
-      <h2 className="text-sm font-medium">Historial de pujas</h2>
-      <ol className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 text-sm dark:divide-zinc-800 dark:border-zinc-800" data-testid="bid-history">
+      <h2 className="font-semibold">Historial de pujas</h2>
+      <ol className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface text-sm" data-testid="bid-history">
         {state.history.map((h, i) => (
-          <li key={`${h.amountCents}-${h.at}`} className={`flex items-center justify-between gap-3 px-3 py-2 ${i === 0 ? "font-medium" : ""}`}>
+          <li key={`${h.amountCents}-${h.at}`} className={`flex items-center justify-between gap-3 px-4 py-2.5 ${i === 0 ? "bg-brand-soft font-semibold" : ""}`}>
             <span>
               {h.label}
               {h.isYou ? <span className="text-zinc-500"> (tú)</span> : null}

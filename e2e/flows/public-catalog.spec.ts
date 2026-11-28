@@ -5,7 +5,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { eq, like } from "drizzle-orm";
-import { adminPage, deleteTrackedSessions, flowsEnabled, seedDraftAuction, signOut, testRunId, withDb } from "./helpers";
+import { adminPage, deleteAuditRows, deleteTrackedSessions, flowsEnabled, seedDraftAuction, signOut, testRunId, withDb } from "./helpers";
 
 test.skip(!flowsEnabled || !process.env.UPLOAD_DIR, "opt-in: ALLOW_DB_TESTS=1, EMAIL_DRY_RUN_FILE and UPLOAD_DIR");
 test.describe.configure({ mode: "serial" });
@@ -34,6 +34,7 @@ test.afterAll(async () => {
   // share it while they run, so don't delete files here.
   if (auctionId) await withDb((db) => db.delete(auction).where(eq(auction.id, auctionId)));
   await withDb((db) => db.delete(auction).where(like(auction.title, `[TEST] ${runId}%`)));
+  await deleteAuditRows(runId);
   await deleteTrackedSessions();
 });
 
@@ -58,7 +59,7 @@ test("visitors never see a draft; the admin previews it with correct times and c
     await expect(visitor.getByText(title)).toHaveCount(0);
   }
   await visitor.goto("/");
-  await expect(visitor.getByRole("heading", { level: 1, name: "Subastas del sur" })).toBeVisible();
+  await expect(visitor.getByRole("heading", { level: 1, name: "Subastas en línea de vehículos, maquinaria y equipo" })).toBeVisible();
   await expect(visitor.getByRole("link", { name: "Registrarme", exact: true })).toBeVisible();
 
   // 2. The admin, browsing from Tokyo, sees the preview in Mexico City time plus Tokyo time

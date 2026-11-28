@@ -5,7 +5,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { eq, inArray, sql } from "drizzle-orm";
-import { adminPage, deleteTrackedSessions, flowsEnabled, seedBidder, seedLiveUnlistedAuction, signOut, signedInPage, testRunId, withDb } from "./helpers";
+import { adminPage, deleteAuditRows, deleteTrackedSessions, flowsEnabled, seedBidder, seedLiveUnlistedAuction, signedInPage, signOut, testRunId, withDb } from "./helpers";
 
 test.skip(!flowsEnabled || !process.env.UPLOAD_DIR, "opt-in: ALLOW_DB_TESTS=1, EMAIL_DRY_RUN_FILE and UPLOAD_DIR");
 test.describe.configure({ mode: "serial" });
@@ -28,6 +28,7 @@ test.afterAll(async () => {
     const ids = Object.values(people).map((p) => p.id);
     if (ids.length) await db.delete(user).where(inArray(user.id, ids)); // cascades sessions and accounts
   });
+  await deleteAuditRows(runId);
   await deleteTrackedSessions();
 });
 

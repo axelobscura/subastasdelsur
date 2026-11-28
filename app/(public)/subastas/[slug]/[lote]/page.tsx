@@ -5,12 +5,13 @@ import { Suspense } from "react";
 import { AuctionTimes } from "@/components/auction-times";
 import { Gallery } from "@/components/gallery";
 import { LiveLot, type Viewer } from "@/components/live-lot";
-import { Notice, Skeleton } from "@/components/ui";
+import { LotTag, Notice, Skeleton } from "@/components/ui";
 import { getAuctionBySlug, getCatalogProduct, getNeighbourLots } from "@/lib/catalog";
 import { getVisibleAuction } from "@/lib/catalog-access";
 import { getLotState } from "@/lib/bids-db";
 import { getCurrentUser } from "@/lib/dal";
 import { getDb } from "@/lib/db";
+import { formatMoney } from "@/lib/money";
 import { mediaUrl } from "@/lib/storage";
 
 type Props = PageProps<"/subastas/[slug]/[lote]">;
@@ -25,7 +26,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const lot = parseLot(lote);
   if (!auction || auction.status === "draft" || lot === null) return {};
   const found = await getCatalogProduct(auction.id, lot);
-  return found ? { title: `Lote ${found.lotNumber}: ${found.title} · ${auction.title}` } : {};
+  if (!found) return {};
+  const title = `Lote ${found.lotNumber}: ${found.title} · ${auction.title}`;
+  const description = `${found.description.trim().replace(/\s+/g, " ").slice(0, 150) || found.title}. Precio de salida ${formatMoney(found.startingPriceCents)}.`;
+  return { title, description, openGraph: { title, description } };
 }
 
 export default function LotPage({ params }: Props) {
@@ -55,17 +59,17 @@ async function LotView({ params }: { params: Props["params"] }) {
         </Notice>
       ) : null}
       <nav className="flex flex-wrap items-center justify-between gap-3 text-sm">
-        <Link href={`/subastas/${auction.slug}`} className="underline">
+        <Link href={`/subastas/${auction.slug}`} className="font-medium text-brand hover:underline">
           ← {auction.title}
         </Link>
-        <span className="flex gap-4">
+        <span className="flex gap-2">
           {neighbours.previous !== null ? (
-            <Link href={`/subastas/${auction.slug}/${neighbours.previous}`} className="underline">
+            <Link href={`/subastas/${auction.slug}/${neighbours.previous}`} className="rounded-md border border-line bg-surface px-3 py-1.5 font-medium hover:border-brand">
               ← Lote {neighbours.previous}
             </Link>
           ) : null}
           {neighbours.next !== null ? (
-            <Link href={`/subastas/${auction.slug}/${neighbours.next}`} className="underline">
+            <Link href={`/subastas/${auction.slug}/${neighbours.next}`} className="rounded-md border border-line bg-surface px-3 py-1.5 font-medium hover:border-brand">
               Lote {neighbours.next} →
             </Link>
           ) : null}
@@ -78,16 +82,21 @@ async function LotView({ params }: { params: Props["params"] }) {
           images={item.images.map((image, i) => ({ src: mediaUrl(image.key), width: image.width, height: image.height, alt: image.alt || `${item.title}, foto ${i + 1}` }))}
         />
         <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <p className="text-sm font-medium tracking-wide text-zinc-500 uppercase">Lote {item.lotNumber}</p>
-            <h1 className="text-3xl font-semibold tracking-tight">{item.title}</h1>
+          <div className="flex flex-col items-start gap-3">
+            <LotTag number={item.lotNumber} className="text-sm" />
+            <h1 className="font-display text-4xl leading-[1.05]">{item.title}</h1>
           </div>
 
           <Suspense fallback={<Skeleton className="h-64" />}>
             <LiveLotSection productId={item.id} slug={auction.slug} lot={item.lotNumber} auctionTimeZone={auction.timezone} />
           </Suspense>
 
-          {item.description ? <p className="whitespace-pre-line text-zinc-700 dark:text-zinc-300">{item.description}</p> : null}
+          {item.description ? (
+            <div className="flex flex-col gap-2 border-t border-line pt-5">
+              <h2 className="font-semibold">Descripción</h2>
+              <p className="whitespace-pre-line leading-relaxed text-zinc-700 dark:text-zinc-300">{item.description}</p>
+            </div>
+          ) : null}
         </div>
       </div>
 

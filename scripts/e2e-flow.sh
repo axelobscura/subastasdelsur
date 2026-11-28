@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 PORT="${E2E_PORT:-3100}"
 EMAIL_FILE="$(mktemp -t subastas-emails)"
 UPLOAD_DIR="$(mktemp -d -t subastas-uploads)" # photos from tests never mix with real ones
-export TZ=UTC EMAIL_DRY_RUN=1 EMAIL_DRY_RUN_FILE="$EMAIL_FILE" BETTER_AUTH_URL="http://localhost:${PORT}" UPLOAD_DIR
+export TZ=UTC EMAIL_DRY_RUN=1 EMAIL_DRY_RUN_FILE="$EMAIL_FILE" BETTER_AUTH_URL="http://localhost:${PORT}" UPLOAD_DIR RATE_LIMIT_SIGN_IN=100 # all specs sign in from 127.0.0.1
 
 npx next build
 npx next start -p "$PORT" > "${EMAIL_FILE}.server.log" 2>&1 &

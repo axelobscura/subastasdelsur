@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { refresh } from "next/cache";
 import type { FormState } from "@/components/form";
+import { audit } from "@/lib/audit";
 import { requireAdmin } from "@/lib/dal";
 import { getDb, user } from "@/lib/db";
 import { queueEmail } from "@/lib/email/send";
@@ -30,10 +31,19 @@ export async function reviewBidder(_prev: FormState, formData: FormData): Promis
   const status = decision === "approve" ? "approved" : "rejected";
   if (bidder.status === status) return { ok: true, message: "No hubo cambios." };
 
-  await db
-    .update(user)
-    .set({ approvalStatus: status, reviewedAt: new Date(), reviewedBy: admin.id, reviewNote: note.data || null })
-    .where(eq(user.id, bidder.id));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(user)
+      .set({ approvalStatus: status, reviewedAt: new Date(), reviewedBy: admin.id, reviewNote: note.data || null })
+      .where(eq(user.id, bidder.id));
+    await audit(tx, admin, {
+      action: status === "approved" ? "bidder.approve" : "bidder.reject",
+      entityType: "user",
+      entityId: bidder.id,
+      entityLabel: `${bidder.name} (${bidder.email})`,
+      details: { from: bidder.status, to: status, ...(note.data ? { note: note.data } : {}) },
+    });
+  });
 
   queueEmail(
     status === "approved" ? "bidder-approved" : "bidder-rejected",

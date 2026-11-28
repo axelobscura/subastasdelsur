@@ -30,7 +30,7 @@ export function Field({
         name={name}
         aria-invalid={errors?.length ? true : undefined}
         aria-describedby={describedBy}
-        className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-base outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10 aria-invalid:border-red-600 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100"
+        className="rounded-lg border border-zinc-300 bg-surface px-3 py-2.5 text-base outline-none focus:border-brand focus:ring-3 focus:ring-brand/15 aria-invalid:border-red-600 dark:border-zinc-700 dark:bg-zinc-900"
         {...input}
       />
       {errors?.length ? (
@@ -49,7 +49,7 @@ export function Field({
 export function SubmitButton({ children, pendingText, variant = "primary", ...props }: { pendingText?: string; variant?: "primary" | "danger" | "secondary" } & ComponentProps<"button">) {
   const { pending } = useFormStatus();
   const styles = {
-    primary: "bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300",
+    primary: "btn-brand hover:brightness-110 active:translate-y-px",
     danger: "bg-red-700 text-white hover:bg-red-600",
     secondary: "border border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800",
   }[variant];
@@ -57,7 +57,7 @@ export function SubmitButton({ children, pendingText, variant = "primary", ...pr
     <button
       type="submit"
       disabled={pending}
-      className={`rounded-md px-4 py-2.5 font-medium transition-colors disabled:cursor-wait disabled:opacity-60 ${styles}`}
+      className={`rounded-lg px-4 py-2.5 font-semibold transition-colors disabled:cursor-wait disabled:opacity-60 ${styles}`}
       {...props}
     >
       {pending ? (pendingText ?? "Enviando…") : children}

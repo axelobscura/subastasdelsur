@@ -5,7 +5,7 @@
  */
 import { expect, test } from "@playwright/test";
 import { eq, like, sql } from "drizzle-orm";
-import { adminPage, createDraft, deleteTrackedSessions, flowsEnabled, signOut, testRunId, withDb } from "./helpers";
+import { adminPage, createDraft, deleteAuditRows, deleteTrackedSessions, flowsEnabled, signOut, testRunId, withDb } from "./helpers";
 
 test.skip(!flowsEnabled, "opt-in: ALLOW_DB_TESTS=1 and EMAIL_DRY_RUN_FILE");
 test.describe.configure({ mode: "serial" });
@@ -16,6 +16,7 @@ const titlePrefix = `[TEST] ${runId}`;
 test.afterAll(async () => {
   const { auction } = await import("../../lib/db/schema");
   await withDb((db) => db.delete(auction).where(like(auction.title, `${titlePrefix}%`)));
+  await deleteAuditRows(runId);
   await deleteTrackedSessions();
 });
 

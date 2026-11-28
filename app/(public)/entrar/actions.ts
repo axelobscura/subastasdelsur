@@ -14,7 +14,7 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
   const values = formValues(formData, ["email"]);
   const parsed = signInSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: z.flattenError(parsed.error).fieldErrors, values };
-  if (!(await allowAction("sign-in", 10, 15 * 60 * 1000))) {
+  if (!(await allowAction("sign-in", Number(process.env.RATE_LIMIT_SIGN_IN ?? 10), 15 * 60 * 1000))) {
     return { message: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.", values };
   }
 

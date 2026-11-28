@@ -5,6 +5,7 @@ import { refresh, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import type { FormState } from "@/components/form";
 import { displayState, permissions } from "@/lib/auctions/rules";
+import { audit, diffFields } from "@/lib/audit";
 import { requireAdmin } from "@/lib/dal";
 import { auction, getDb, product, productImage } from "@/lib/db";
 import type { Db } from "@/lib/db/client";
@@ -44,7 +45,7 @@ const DUPLICATE_LOT: FormState["fieldErrors"] = { lotNumber: ["Ya hay un product
 // ---------------------------------------------------------------------------
 
 export async function createProduct(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const auctionId = String(formData.get("auctionId") ?? "");
   const values = formValues(formData, FIELDS);
   const text = productTextSchema.safeParse(values);
@@ -71,6 +72,13 @@ export async function createProduct(_prev: FormState, formData: FormData): Promi
         minIncrementCents: minIncrement,
         reservePriceCents: reservePrice,
       });
+      await audit(tx, admin, {
+        action: "product.create",
+        entityType: "product",
+        entityId: id,
+        entityLabel: `${locked.auction.title} · Lote ${lotNumber}: ${text.data.title}`,
+        details: { startingPriceCents: startingPrice, minIncrementCents: minIncrement, reservePriceCents: reservePrice },
+      });
       return { ok: true };
     });
   } catch (error) {
@@ -83,7 +91,7 @@ export async function createProduct(_prev: FormState, formData: FormData): Promi
 }
 
 export async function updateProduct(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const auctionId = String(formData.get("auctionId") ?? "");
   const productId = String(formData.get("productId") ?? "");
   const values = formValues(formData, FIELDS);
@@ -110,8 +118,13 @@ export async function updateProduct(_prev: FormState, formData: FormData): Promi
         set.minIncrementCents = pricing.data.minIncrement;
         set.reservePriceCents = pricing.data.reservePrice;
       }
-      const [updated] = await tx.update(product).set(set).where(and(eq(product.id, productId), eq(product.auctionId, auctionId)));
-      if (updated.affectedRows === 0) return { message: "No encontramos este producto." };
+      const [before] = await tx.select().from(product).where(and(eq(product.id, productId), eq(product.auctionId, auctionId)));
+      if (!before) return { message: "No encontramos este producto." };
+      await tx.update(product).set(set).where(eq(product.id, productId));
+      const changes = diffFields(before, set, ["title", "description", "lotNumber", "startingPriceCents", "minIncrementCents", "reservePriceCents"]);
+      if (Object.keys(changes).length) {
+        await audit(tx, admin, { action: "product.update", entityType: "product", entityId: productId, entityLabel: `${locked.auction.title} · Lote ${set.lotNumber ?? before.lotNumber}: ${set.title ?? before.title}`, details: changes });
+      }
       return { ok: true, message: "Producto guardado." };
     });
   } catch (error) {
@@ -126,7 +139,7 @@ export async function updateProduct(_prev: FormState, formData: FormData): Promi
 }
 
 export async function deleteProduct(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const auctionId = String(formData.get("auctionId") ?? "");
   const productId = String(formData.get("productId") ?? "");
   if (formData.get("confirm") !== "on") return { message: "Marca la casilla para confirmar que quieres eliminar el producto." };
@@ -136,8 +149,10 @@ export async function deleteProduct(_prev: FormState, formData: FormData): Promi
     if (!locked) return { message: "No encontramos esta subasta." };
     if (!locked.can.editProducts) return { message: "La subasta ya empezó o está cancelada: ya no se pueden quitar productos." };
     const images = await tx.select({ key: productImage.storageKey }).from(productImage).where(eq(productImage.productId, productId));
-    const [deleted] = await tx.delete(product).where(and(eq(product.id, productId), eq(product.auctionId, auctionId)));
-    if (deleted.affectedRows === 0) return { message: "No encontramos este producto." };
+    const [target] = await tx.select({ lotNumber: product.lotNumber, title: product.title }).from(product).where(and(eq(product.id, productId), eq(product.auctionId, auctionId)));
+    if (!target) return { message: "No encontramos este producto." };
+    await audit(tx, admin, { action: "product.delete", entityType: "product", entityId: productId, entityLabel: `${locked.auction.title} · Lote ${target.lotNumber}: ${target.title}`, details: { photos: images.length } });
+    await tx.delete(product).where(eq(product.id, productId));
     return { ok: true, keys: images.map((i) => i.key) };
   });
   if (!result.ok) return result;
@@ -155,7 +170,7 @@ export type UploadResult = { ok: boolean; message: string };
 
 /** One photo per call (the client sends files one by one, each under the size limit). */
 export async function uploadProductImage(formData: FormData): Promise<UploadResult> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const auctionId = String(formData.get("auctionId") ?? "");
   const productId = String(formData.get("productId") ?? "");
   const file = formData.get("photo");
@@ -182,7 +197,7 @@ export async function uploadProductImage(formData: FormData): Promise<UploadResu
       const locked = await lockAuction(tx, auctionId);
       if (!locked) return { ok: false, message: "No encontramos esta subasta." };
       if (!locked.can.editProductContent) return { ok: false, message: "La subasta está cancelada: ya no se pueden subir fotos." };
-      const [owner] = await tx.select({ id: product.id }).from(product).where(and(eq(product.id, productId), eq(product.auctionId, auctionId)));
+      const [owner] = await tx.select({ id: product.id, lotNumber: product.lotNumber, title: product.title }).from(product).where(and(eq(product.id, productId), eq(product.auctionId, auctionId)));
       if (!owner) return { ok: false, message: "No encontramos este producto." };
       const [{ n: current, last }] = await tx
         .select({ n: count(), last: max(productImage.position) })
@@ -195,6 +210,13 @@ export async function uploadProductImage(formData: FormData): Promise<UploadResu
         width: stored.width,
         height: stored.height,
         position: current === 0 ? 0 : (last ?? 0) + 1,
+      });
+      await audit(tx, admin, {
+        action: "product_image.upload",
+        entityType: "product",
+        entityId: productId,
+        entityLabel: `${locked.auction.title} · Lote ${owner.lotNumber}: ${owner.title}`,
+        details: { file: name, width: stored.width, height: stored.height },
       });
       return { ok: true, message: `${name}: subida.` };
     });
@@ -212,7 +234,7 @@ export async function uploadProductImage(formData: FormData): Promise<UploadResu
 }
 
 export async function changeImage(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const auctionId = String(formData.get("auctionId") ?? "");
   const productId = String(formData.get("productId") ?? "");
   const imageId = String(formData.get("imageId") ?? "");
@@ -223,7 +245,7 @@ export async function changeImage(_prev: FormState, formData: FormData): Promise
     const locked = await lockAuction(tx, auctionId);
     if (!locked) return { message: "No encontramos esta subasta." };
     if (!locked.can.editProductContent) return { message: "La subasta está cancelada: ya no se pueden cambiar las fotos." };
-    const [owner] = await tx.select({ id: product.id }).from(product).where(and(eq(product.id, productId), eq(product.auctionId, auctionId)));
+    const [owner] = await tx.select({ id: product.id, lotNumber: product.lotNumber, title: product.title }).from(product).where(and(eq(product.id, productId), eq(product.auctionId, auctionId)));
     if (!owner) return { message: "No encontramos este producto." };
     const images = await tx
       .select({ id: productImage.id, key: productImage.storageKey })
@@ -245,6 +267,13 @@ export async function changeImage(_prev: FormState, formData: FormData): Promise
     for (const [position, id] of order.entries()) {
       await tx.update(productImage).set({ position }).where(eq(productImage.id, id));
     }
+    await audit(tx, admin, {
+      action: intent === "delete" ? "product_image.delete" : "product_image.reorder",
+      entityType: "product",
+      entityId: productId,
+      entityLabel: `${locked.auction.title} · Lote ${owner.lotNumber}: ${owner.title}`,
+      details: intent === "delete" ? { photos: order.length } : { move: intent },
+    });
     return { ok: true, deletedKey: intent === "delete" ? target.key : undefined };
   });
   if (!result.ok) return { message: result.message };

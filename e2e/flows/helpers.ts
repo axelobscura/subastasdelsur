@@ -168,3 +168,10 @@ export async function seedDraftAuction(opts: { title: string; slug: string; star
   });
   return auctionId;
 }
+
+/** Teardown: delete the audit-log rows about this spec's [TEST] data (labels contain the run id). */
+export async function deleteAuditRows(runId: string): Promise<void> {
+  const { like } = await import("drizzle-orm");
+  const { auditLog } = await import("../../lib/db/schema");
+  await withDb((db) => db.delete(auditLog).where(like(auditLog.entityLabel, `%${runId}%`)));
+}

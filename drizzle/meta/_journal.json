@@ -29,6 +29,13 @@
       "when": 1795802426776,
       "tag": "0003_settlement",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1795803205220,
+      "tag": "0004_audit_log",
+      "breakpoints": true
     }
   ]
 }

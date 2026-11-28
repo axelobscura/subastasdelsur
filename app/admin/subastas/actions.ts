@@ -4,7 +4,8 @@ import { and, eq, like, ne } from "drizzle-orm";
 import { refresh, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import type { FormState } from "@/components/form";
-import { type FieldErrors, parseAuctionText, parseAuctionWindow, parseAuctionWindowForEdit, permissions, publishProblems, slugify, uniqueSlug } from "@/lib/auctions/rules";
+import { type FieldErrors, displayState, parseAuctionText, parseAuctionWindow, parseAuctionWindowForEdit, permissions, publishProblems, slugify, uniqueSlug } from "@/lib/auctions/rules";
+import { audit, diffFields } from "@/lib/audit";
 import { requireAdmin } from "@/lib/dal";
 import { auction, getDb, product, productImage } from "@/lib/db";
 import type { Db } from "@/lib/db/client";
@@ -61,7 +62,16 @@ export async function createAuction(_prev: FormState, formData: FormData): Promi
   for (let attempt = 0; ; attempt++) {
     const slug = attempt === 0 ? await freeSlug(db, text.data.title) : `${slugify(text.data.title, 70)}-${crypto.randomUUID().slice(0, 6)}`;
     try {
-      await db.insert(auction).values({ id, slug, ...text.data, ...window.data, status: "draft", createdBy: admin.id });
+      await db.transaction(async (tx) => {
+        await tx.insert(auction).values({ id, slug, ...text.data, ...window.data, status: "draft", createdBy: admin.id });
+        await audit(tx, admin, {
+          action: "auction.create",
+          entityType: "auction",
+          entityId: id,
+          entityLabel: text.data.title,
+          details: { startsAt: window.data.startsAt.toISOString(), endsAt: window.data.endsAt.toISOString(), timezone: window.data.timezone },
+        });
+      });
       break;
     } catch (error) {
       if (!isDuplicateKey(error) || attempt >= 2) throw error;
@@ -73,7 +83,7 @@ export async function createAuction(_prev: FormState, formData: FormData): Promi
 }
 
 export async function updateAuction(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const values = formInput(formData);
 
@@ -98,7 +108,10 @@ export async function updateAuction(_prev: FormState, formData: FormData): Promi
 
     // Drafts follow their title in the URL. Once published, the URL stays put.
     const slug = current.status === "draft" && text.data.title !== current.title ? await freeSlug(tx, text.data.title, id) : current.slug;
-    await tx.update(auction).set({ ...text.data, ...(window ?? {}), slug }).where(eq(auction.id, id));
+    const next = { ...text.data, ...(window ?? {}), slug };
+    await tx.update(auction).set(next).where(eq(auction.id, id));
+    const changes = diffFields(current, next, ["title", "description", "listed", "timezone", "startsAt", "endsAt", "slug"]);
+    if (Object.keys(changes).length) await audit(tx, admin, { action: "auction.update", entityType: "auction", entityId: id, entityLabel: next.title, details: changes });
     return { ok: true, message: "Cambios guardados." };
   });
 
@@ -110,7 +123,7 @@ export async function updateAuction(_prev: FormState, formData: FormData): Promi
 }
 
 export async function changeAuctionStatus(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const intent = formData.get("intent");
 
@@ -119,6 +132,7 @@ export async function changeAuctionStatus(_prev: FormState, formData: FormData):
     if (!current) return { message: "No encontramos esta subasta." };
     const now = await dbNow(tx);
     const can = permissions(current, now);
+    const log = (action: string, details?: Record<string, unknown>) => audit(tx, admin, { action, entityType: "auction", entityId: id, entityLabel: current.title, details });
 
     switch (intent) {
       case "publish": {
@@ -130,11 +144,13 @@ export async function changeAuctionStatus(_prev: FormState, formData: FormData):
         const problems = publishProblems({ ...current, ...facts }, now);
         if (problems.length) return { message: `No se puede publicar todavía: ${problems.join(" ")}` };
         await tx.update(auction).set({ status: "published" }).where(eq(auction.id, id));
+        await log("auction.publish", { products: facts.productCount });
         return { ok: true, message: "Subasta publicada." };
       }
       case "unpublish": {
         if (!can.unpublish) return { message: "Solo se puede despublicar una subasta que todavía no empieza." };
         await tx.update(auction).set({ status: "draft" }).where(eq(auction.id, id));
+        await log("auction.unpublish");
         return { ok: true, message: "La subasta volvió a borrador y ya no es visible al público." };
       }
       case "cancel": {
@@ -142,6 +158,7 @@ export async function changeAuctionStatus(_prev: FormState, formData: FormData):
         if (formData.get("confirm") !== "on") return { message: "Marca la casilla para confirmar la cancelación." };
         await tx.update(auction).set({ status: "cancelled" }).where(eq(auction.id, id));
         const bidders = await auctionBidders(tx, id);
+        await log("auction.cancel", { wasLive: displayState(current, now) === "live", biddersNotified: bidders.length });
         return {
           ok: true,
           message: bidders.length ? `Subasta cancelada. Avisamos por correo a ${bidders.length} postor${bidders.length === 1 ? "" : "es"}.` : "Subasta cancelada.",
@@ -157,6 +174,7 @@ export async function changeAuctionStatus(_prev: FormState, formData: FormData):
           .from(productImage)
           .innerJoin(product, eq(product.id, productImage.productId))
           .where(eq(product.auctionId, id));
+        await log("auction.delete", { photos: images.length });
         await tx.delete(auction).where(eq(auction.id, id)); // products and image rows cascade
         return { ok: true, deleted: true, keys: images.map((i) => i.key) };
       }
